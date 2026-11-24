@@ -135,6 +135,7 @@
     function ask(ix, question, asker, channel, settings, users, channels) {
       var mine = users[asker].groups;
       var personal = decide(ix, question, function (d) { return canRead(ix, mine, d); }, settings);
+      if (personal.decision === "unknown" && personal.owner === asker) personal.owner = asker === "ruth" ? "leo" : "ruth";
       if (!channel) return Object.assign(personal, { visibility: "dm" });
       var members = channels[channel].members;
       var pub = decide(ix, question, function (d) { return visibleToAll(ix, members, d, users); }, settings);

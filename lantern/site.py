@@ -20,12 +20,21 @@ def payload():
     # a little history on the knowledge desk so the queue is not empty
     ws.feedback(msgs[6]["id"], "ruth", "helpful")
     ws.feedback(msgs[10]["id"], "maya", "outdated")
-    ws.move("G-02", "ruth", "assign", to="maya")
+    by_q = {g["question"]: g["id"] for g in ws.gaps}
+    g = by_q["What was Q3 revenue against plan and what is the runway?"]
+    ws.move(g, "leo", "dismiss", reason="Board figures are shared at the all-hands, not through Lantern")
+    g = by_q["Is there a company car scheme?"]
+    ws.move(g, "ruth", "assign", to="ana")
+    ws.move(g, "ana", "answer", text="There is no company car scheme. Use the travel desk for rental cars on business trips.", groups=["all_staff"])
+    g = by_q["What is the wifi password for guests?"]
+    ws.move(g, "ruth", "assign", to="ruth")
+    ws.move(g, "ruth", "answer", text="The guest wifi password is shown on the reception screen and changes every Monday.", groups=["all_staff", "contractors"])
+    ws.move(g, "ruth", "publish")
     ev = evals.run()
     return {
         "now": corpus.NOW, "company": corpus.COMPANY, "groups": corpus.GROUPS, "users": corpus.USERS,
         "admins": corpus.ADMINS, "channels": corpus.CHANNELS, "sources": corpus.SOURCES,
-        "docs": corpus.DOCS, "cases": CASES, "messages": msgs, "gaps": ws.gaps, "reviews": ws.reviews,
+        "docs": list(ws.index.docs.values()), "cases": CASES, "messages": msgs, "gaps": ws.gaps, "reviews": ws.reviews,
         "audit": ws.audit, "sync": connectors.sync_all(),
         "evals": {k: v for k, v in ev.items()},
         "engine": {"stop": sorted(engine.STOP), "synonyms": engine.SYNONYMS,

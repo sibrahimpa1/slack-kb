@@ -20,6 +20,7 @@ SYNONYMS = {
     "payday": "pay", "laptop": "laptops", "gym": "wellbeing", "deploying": "deploy", "release": "deploy",
     "prod": "production", "discounts": "discount", "hotel": "hotels", "allowance": "allowance",
     "expense": "expenses", "reimburse": "reimbursed", "oncall": "call",
+    "off": "leave", "phishing": "suspicious", "clicked": "click", "hacked": "suspicious",
     "approve": "approval", "approves": "approval", "approved": "approval", "approvals": "approval",
 }
 
@@ -181,6 +182,8 @@ def ask(index, question, asker, channel=None, settings=None, users=None, channel
     channels = channels or corpus.CHANNELS
     mine = users[asker]["groups"]
     personal = decide(index, question, lambda d: can_read(index, mine, d), settings)
+    if personal["decision"] == "unknown" and personal["owner"] == asker:
+        personal["owner"] = "leo" if asker == "ruth" else "ruth"  # never route a gap back to the person asking
     if channel is None:
         return {**personal, "visibility": "dm"}
     members = channels[channel]["members"]

@@ -27,7 +27,7 @@ def demo():
     for c in CASES:
         if c["id"] in picks:
             show(ws, ws.ask(c["who"], c["q"], c["where"], case_id=c["id"]))
-    g = ws.gaps[0]
+    g = next(x for x in ws.gaps if "dog" in x["question"])
     print(f"\nKnowledge gap {g['id']}: \"{g['question']}\" routed to {corpus.USERS[g['owner']]['name']}")
     ws.move(g["id"], "ruth", "assign", to="ruth")
     ws.move(g["id"], "ruth", "answer", text="Dogs are welcome in the Berlin office on Fridays if they are house-trained and stay off the kitchen floor.")

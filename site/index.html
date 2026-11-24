@@ -1,0 +1,811 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Lantern · company knowledge in Slack</title>
+<meta name="description" content="Lantern answers staff questions in Slack from company docs, cites the source and respects who may read what. Demo on synthetic data.">
+<style>:root{
+  --paper:#f7f4ee; --card:#fffdf9; --ink:#1f2421; --muted:#6b6f68; --line:#e4ddd0; --soft:#efe9dd;
+  --pine:#21302a; --pine2:#2c3f37; --pine-text:#d9e2dc; --pine-muted:#93a39b;
+  --amber:#e9952b; --amber-soft:#fbe9cf; --amber-ink:#8a4f07;
+  --lock:#a6462f; --lock-soft:#f6e1da; --ok:#2e7a4d; --ok-soft:#dcefe3; --blue:#2f5f8a; --blue-soft:#e1ebf4;
+  --serif:"Iowan Old Style","Palatino Linotype",Palatino,Georgia,serif;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Inter,Roboto,Helvetica,Arial,sans-serif;
+  --mono:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;background:var(--paper);color:var(--ink);font:14px/1.5 var(--sans)}
+a{color:inherit}
+button{font:inherit;cursor:pointer}
+#banner{height:28px;display:flex;align-items:center;justify-content:center;gap:8px;background:var(--amber);color:#2a1a05;font-size:12.5px;font-weight:600}
+#banner a{color:#2a1a05}
+#app{height:calc(100vh - 28px);display:grid;grid-template-columns:256px minmax(0,1fr);overflow:hidden}
+#app.with-pane{grid-template-columns:256px minmax(0,1fr) 400px}
+
+/* sidebar */
+.side{background:var(--pine);color:var(--pine-text);display:flex;flex-direction:column;min-height:0}
+.ws{display:flex;align-items:center;gap:10px;padding:16px 16px 12px}
+.ws .logo{width:30px;height:30px;border-radius:9px;background:radial-gradient(circle at 50% 45%,#ffd58a 0,var(--amber) 45%,#a35c0b 100%);box-shadow:0 0 18px rgba(233,149,43,.45)}
+.ws b{display:block;color:#fff;font-size:15px}
+.ws small{color:var(--pine-muted);font-size:12px}
+.as{margin:0 12px 10px;padding:10px;border-radius:10px;background:var(--pine2)}
+.as label{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--pine-muted);margin-bottom:6px}
+.as select{width:100%;background:#17211d;color:#fff;border:1px solid #3b5047;border-radius:7px;padding:6px 8px;font:inherit}
+.as .who{display:flex;gap:8px;align-items:center;margin-top:8px;font-size:12px;color:var(--pine-muted)}
+.nav{overflow:auto;padding:4px 8px 12px;flex:1}
+.nav h4{margin:14px 10px 4px;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--pine-muted);font-weight:600}
+.nav a{display:flex;align-items:center;gap:8px;padding:5px 10px;border-radius:7px;text-decoration:none;color:var(--pine-text)}
+.nav a:hover{background:var(--pine2)}
+.nav a.on{background:var(--amber);color:#24170a;font-weight:600}
+.nav a.off{opacity:.45}
+.nav .hash{width:14px;text-align:center;opacity:.8}
+.nav .badge{margin-left:auto;background:var(--amber);color:#24170a;border-radius:10px;font-size:11px;padding:0 7px;font-weight:700}
+.nav a.on .badge{background:#24170a;color:var(--amber)}
+.side .keys{padding:10px 16px 14px;font-size:11.5px;color:var(--pine-muted);border-top:1px solid #33463e}
+kbd{font:11px var(--mono);background:rgba(255,255,255,.1);border-radius:4px;padding:1px 5px}
+main kbd{background:var(--soft);color:var(--muted)}
+
+/* main */
+main{display:flex;flex-direction:column;min-width:0;min-height:0;background:var(--paper)}
+.head{display:flex;align-items:center;gap:12px;padding:12px 22px;border-bottom:1px solid var(--line);background:var(--card);min-height:58px}
+.head h1{font-size:17px;margin:0}
+.head .topic{color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.head .members{margin-left:auto;display:flex}
+.av{width:26px;height:26px;border-radius:7px;display:inline-grid;place-items:center;font-size:11px;font-weight:700;color:#fff;flex:none}
+.members .av{margin-left:-6px;border:2px solid var(--card)}
+.stream{flex:1;overflow:auto;padding:18px 22px 8px}
+.day{display:flex;align-items:center;gap:10px;color:var(--muted);font-size:12px;margin:6px 0 14px}
+.day:before,.day:after{content:"";flex:1;height:1px;background:var(--line)}
+.msg{display:grid;grid-template-columns:36px 1fr;gap:10px;margin-bottom:14px}
+.msg .av{width:36px;height:36px;border-radius:9px;font-size:13px}
+.msg .meta{font-size:12.5px;color:var(--muted)}
+.msg .meta b{color:var(--ink);font-size:14px;margin-right:6px}
+.msg .body{margin-top:2px}
+.bot .av{background:radial-gradient(circle at 50% 40%,#ffd58a 0,var(--amber) 50%,#a35c0b 100%)}
+.reply{margin-top:4px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px 14px;max-width:720px}
+.reply.private{border-style:dashed;border-color:#c9b28c;background:#fffaf0}
+.reply.locked{background:var(--lock-soft);border-color:#e7c3b6}
+.reply.unknown{background:#f4f1ea}
+.reply p{margin:0 0 8px}
+.private-note{font-size:12px;color:var(--amber-ink);margin-bottom:6px;display:flex;gap:6px;align-items:center}
+.srcs{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0 4px}
+.src{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--paper);border-radius:999px;padding:3px 10px;font-size:12.5px;text-decoration:none}
+.src:hover{border-color:var(--amber)}
+.src .dot{width:8px;height:8px;border-radius:50%}
+.how{font-size:12px;color:var(--muted);margin-top:4px}
+.how.warn{color:var(--lock)}
+.note{font-size:12.5px;margin-top:6px;padding:6px 9px;border-radius:7px;background:var(--amber-soft);color:var(--amber-ink)}
+.fb{display:flex;gap:6px;margin-top:8px}
+.fb button{border:1px solid var(--line);background:var(--card);border-radius:7px;padding:3px 10px;font-size:12.5px;color:var(--ink)}
+.fb button:hover{border-color:var(--amber)}
+.fb button.done{background:var(--ok-soft);border-color:#b6dbc4;color:var(--ok)}
+.typing{display:inline-flex;gap:4px;padding:10px 12px;background:var(--card);border:1px solid var(--line);border-radius:12px}
+.typing i{width:6px;height:6px;border-radius:50%;background:var(--amber);animation:b 1s infinite}
+.typing i:nth-child(2){animation-delay:.15s}.typing i:nth-child(3){animation-delay:.3s}
+@keyframes b{0%,80%,100%{opacity:.25;transform:translateY(0)}40%{opacity:1;transform:translateY(-3px)}}
+.welcome{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px 20px;margin-bottom:18px;max-width:760px}
+.welcome h2{font-family:var(--serif);font-weight:600;font-size:21px;margin:0 0 6px}
+.welcome ol{margin:8px 0 0;padding-left:20px;color:var(--muted)}
+.compose{padding:10px 22px 16px;background:var(--paper)}
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
+.chip{border:1px solid var(--line);background:var(--card);border-radius:999px;padding:4px 11px;font-size:12.5px;color:var(--ink)}
+.chip:hover{border-color:var(--amber);background:var(--amber-soft)}
+.box{display:flex;gap:8px;background:var(--card);border:1.5px solid var(--line);border-radius:12px;padding:6px 6px 6px 14px}
+.box:focus-within{border-color:var(--amber);box-shadow:0 0 0 3px rgba(233,149,43,.15)}
+.box input{flex:1;border:0;outline:0;background:transparent;font:inherit;font-size:14.5px}
+.box button{border:0;background:var(--pine);color:#fff;border-radius:8px;padding:7px 14px;font-weight:600}
+.box button:disabled{opacity:.4;cursor:default}
+.empty{margin:60px auto;max-width:440px;text-align:center;color:var(--muted)}
+.empty h3{font-family:var(--serif);color:var(--ink);font-size:20px;margin:0 0 6px}
+
+/* doc pane */
+.pane{border-left:1px solid var(--line);background:var(--card);display:flex;flex-direction:column;min-height:0}
+.pane .ph{display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-bottom:1px solid var(--line);font-size:12.5px;color:var(--muted)}
+.pane .ph button{border:0;background:none;font-size:18px;color:var(--muted)}
+.doc{overflow:auto;padding:20px 24px 30px}
+.doc h2{font-family:var(--serif);font-size:24px;line-height:1.2;margin:4px 0 8px;font-weight:600}
+.doc .path{font-size:12.5px;color:var(--muted)}
+.facts{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:12.5px;margin:14px 0;padding:12px;background:var(--paper);border-radius:10px}
+.facts dt{color:var(--muted)}
+.facts dd{margin:0}
+.doc h3{font-family:var(--serif);font-size:16px;margin:18px 0 4px}
+.doc .sec{font-family:var(--serif);font-size:15.5px;line-height:1.65;padding:6px 10px;margin:0 -10px;border-radius:8px}
+.doc .sec.hit{background:var(--amber-soft);box-shadow:inset 3px 0 0 var(--amber)}
+.pill{display:inline-block;border-radius:999px;padding:1px 9px;font-size:11.5px;font-weight:600;margin:0 4px 4px 0}
+.pill.g{background:var(--blue-soft);color:var(--blue)}
+.pill.warn{background:var(--amber-soft);color:var(--amber-ink)}
+.pill.lock{background:var(--lock-soft);color:var(--lock)}
+.pill.ok{background:var(--ok-soft);color:var(--ok)}
+.pill.grey{background:var(--soft);color:var(--muted)}
+
+/* desk pages */
+.page{flex:1;overflow:auto;padding:22px 26px 40px}
+.page h2{font-family:var(--serif);font-size:24px;margin:0 0 4px;font-weight:600}
+.page .lede{color:var(--muted);margin:0 0 18px;max-width:760px}
+.lanes{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;align-items:start}
+.lanes.two{grid-template-columns:repeat(2,minmax(0,1fr))}
+.lane{background:var(--soft);border-radius:12px;padding:10px;min-height:120px}
+.lane h4{margin:2px 4px 8px;font-size:12px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);display:flex;justify-content:space-between}
+.card{display:block;text-decoration:none;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 11px;margin-bottom:8px}
+.card:hover,.card.on{border-color:var(--amber)}
+.card q{display:block;font-weight:600;quotes:none;margin-bottom:6px}
+.card small{color:var(--muted);display:block}
+.split{display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:18px;align-items:start}
+.panel{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.panel h3{margin:0 0 8px;font-size:15px}
+.panel textarea{width:100%;min-height:90px;border:1px solid var(--line);border-radius:8px;padding:8px;font:inherit;resize:vertical}
+.panel select,.panel input[type=text]{border:1px solid var(--line);border-radius:7px;padding:5px 8px;font:inherit;background:#fff}
+.btn{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:6px 12px;font-weight:600}
+.btn.pri{background:var(--pine);border-color:var(--pine);color:#fff}
+.btn.amber{background:var(--amber);border-color:var(--amber);color:#24170a}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.hist{font-size:12.5px;color:var(--muted);margin:10px 0 0;padding-left:16px}
+.denied{font-size:12.5px;color:var(--lock);margin-top:6px}
+table{border-collapse:collapse;width:100%;background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:hidden}
+th,td{text-align:left;padding:7px 10px;border-bottom:1px solid var(--line);font-size:13px;vertical-align:top}
+th{background:var(--soft);font-size:11.5px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+td.c,th.c{text-align:center}
+td .btn{padding:3px 9px;font-size:12px;font-weight:500}
+.yes{color:var(--ok);font-weight:700}
+.no{color:#c8c0b2}
+.tiles{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:18px}
+.tile{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.tile b{display:block;font-family:var(--serif);font-size:30px;line-height:1.1}
+.tile span{color:var(--muted);font-size:12.5px}
+.tile.good b{color:var(--ok)}
+.tile.warn b{color:var(--amber-ink)}
+.sources{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
+.mono{font-family:var(--mono);font-size:12px}
+.warnbox{background:var(--amber-soft);color:var(--amber-ink);border-radius:8px;padding:8px 10px;font-size:12.5px;margin-top:10px}
+.set{display:grid;grid-template-columns:260px 1fr;gap:6px 20px;align-items:center;padding:14px 0;border-bottom:1px solid var(--line)}
+.set p{margin:2px 0 0;color:var(--muted);font-size:12.5px}
+.set input[type=range]{width:260px}
+.lockmsg{background:var(--lock-soft);color:var(--lock);border-radius:10px;padding:12px 14px;margin-bottom:14px}
+
+/* palette, toast */
+#pal{position:fixed;inset:0;background:rgba(20,26,23,.35);display:none;align-items:flex-start;justify-content:center;padding-top:12vh;z-index:20}
+#pal.open{display:flex}
+#pal .in{width:520px;max-width:92vw;background:var(--card);border-radius:14px;box-shadow:0 20px 60px rgba(0,0,0,.25);overflow:hidden}
+#pal input{width:100%;border:0;border-bottom:1px solid var(--line);padding:14px 16px;font:inherit;font-size:16px;outline:0}
+#pal ul{list-style:none;margin:0;padding:6px;max-height:340px;overflow:auto}
+#pal li{padding:7px 10px;border-radius:8px;display:flex;justify-content:space-between;cursor:pointer}
+#pal li.on{background:var(--amber-soft)}
+#pal li small{color:var(--muted)}
+#toast{position:fixed;bottom:18px;left:50%;transform:translateX(-50%) translateY(20px);opacity:0;background:var(--pine);color:#fff;padding:9px 16px;border-radius:10px;transition:.2s;pointer-events:none;z-index:30}
+#toast.show{opacity:1;transform:translateX(-50%)}
+
+@media (max-width:900px){
+  #app,#app.with-pane{grid-template-columns:1fr}
+  .side{display:none}
+  .pane{position:fixed;inset:28px 0 0 0;z-index:10}
+  .lanes,.tiles,.sources{grid-template-columns:1fr}
+  .split{grid-template-columns:1fr}
+}
+</style>
+</head>
+<body>
+<div id="banner">Demo on synthetic data. Fernhill and everyone in it are made up. <a href="https://github.com/sibrahimpa1/slack-kb">Code on GitHub</a></div>
+<div id="app" aria-live="polite"></div>
+<div id="toast" role="status"></div>
+<script>window.LANTERN = {"now":"2026-11-24","company":"Fernhill","groups":{"all_staff":"All employees","contractors":"Contractors","eng":"Engineering","sales":"Sales","people_ops":"People Ops","finance":"Finance","managers":"People managers","leadership":"Leadership team"},"users":{"maya":{"name":"Maya Okafor","title":"Backend engineer","groups":["all_staff","eng"],"slack":"U01MAYA"},"jonas":{"name":"Jonas Weber","title":"Account executive","groups":["all_staff","sales"],"slack":"U02JONAS"},"ruth":{"name":"Ruth Lindqvist","title":"Head of People Ops","groups":["all_staff","people_ops","managers"],"slack":"U03RUTH"},"dev":{"name":"Dev Sharma","title":"Contract frontend developer","groups":["contractors"],"slack":"U04DEV"},"ana":{"name":"Ana Costa","title":"Finance lead","groups":["all_staff","finance","managers"],"slack":"U05ANA"},"leo":{"name":"Leo Brandt","title":"CEO","groups":["all_staff","managers","leadership"],"slack":"U06LEO"}},"admins":["ruth","leo"],"channels":{"ask-people-ops":{"members":["maya","jonas","ruth","ana","leo"],"topic":"Questions about leave, pay days, benefits and policies"},"eng-help":{"members":["maya","dev"],"topic":"Engineering questions, deploys, on-call"},"sales-floor":{"members":["jonas","ana","leo"],"topic":"Deals, pricing and discount approvals"}},"sources":{"confluence":{"name":"Confluence","scope":"Spaces HR, ENG, SALES"},"drive":{"name":"Google Drive","scope":"Shared drives Finance, People, Leadership"},"notion":{"name":"Notion","scope":"Workspace Company handbook"}},"docs":[{"id":"D-01","title":"Travel and expenses policy 2026","source":"drive","path":"Finance / Policies","owner":"ana","groups":["all_staff"],"discoverable":true,"updated":"2026-01-12","review_by":"2027-01-12","sections":[["Per diem and hotels","The daily allowance for meals on business travel is EUR 55 per day. Hotels are capped at EUR 160 per night, or EUR 220 per night in London, Paris and Zurich. Book through the travel desk so the rate is applied automatically."],["Receipts and claims","Submit every expense with a receipt in the expense app within 30 days of the cost. Claims older than 90 days are not reimbursed. Reimbursements are paid with the next payroll run."],["Approvals","Any single expense over EUR 500 needs your manager's approval before you spend it. Flights over EUR 900 also need approval from Finance."]]},{"id":"D-02","title":"Travel policy 2024","source":"drive","path":"Finance / Policies / Archive","owner":"ana","groups":["all_staff"],"discoverable":true,"updated":"2024-02-03","review_by":"2025-02-03","superseded_by":"D-01","sections":[["Per diem and hotels","The daily allowance for meals on business travel is EUR 45 per day. Hotels are capped at EUR 130 per night."],["Receipts","Submit expenses with receipts within 60 days."]]},{"id":"D-03","title":"Parental leave","source":"confluence","path":"HR / Leave","owner":"ruth","groups":["all_staff"],"discoverable":true,"updated":"2026-03-02","review_by":"2027-03-02","sections":[["How much leave","The primary caregiver gets 20 weeks of parental leave at full pay. The secondary caregiver gets 6 weeks at full pay. Both can be taken in up to three blocks within 18 months of the birth or adoption."],["How to request it","Tell People Ops at least 8 weeks before the leave starts. Your manager plans cover with you; you do not need to find cover yourself."]]},{"id":"D-04","title":"Time off and public holidays","source":"notion","path":"Company handbook / Time off","owner":"ruth","groups":["all_staff"],"discoverable":true,"updated":"2025-09-18","review_by":"2026-09-18","sections":[["Annual leave","Everyone gets 25 days of paid annual leave plus the public holidays of their country of employment. Up to 5 unused days carry over and must be used by 31 March."],["Booking time off","Request leave in the HR portal at least two weeks ahead for anything longer than three days. Sick days do not count against annual leave; tell your manager before 10:00 on the day."]]},{"id":"D-05","title":"Salary bands 2026","source":"drive","path":"People / Compensation","owner":"ruth","groups":["people_ops","leadership"],"discoverable":true,"updated":"2026-02-01","review_by":"2027-02-01","canary":"EUR 64,000","sections":[["Engineering bands","Engineer L2 is EUR 52,000 to EUR 63,000. Engineer L3 is EUR 64,000 to EUR 78,000. Senior engineer L4 is EUR 79,000 to EUR 96,000."],["Sales bands","Account executive base salary is EUR 48,000 to EUR 60,000 with on-target earnings up to EUR 95,000."]]},{"id":"D-06","title":"Q1 organisation changes (draft)","source":"drive","path":"Leadership / Planning","owner":"leo","groups":["leadership"],"discoverable":false,"updated":"2026-11-10","review_by":"2026-12-15","canary":"merge the Platform and Data teams","sections":[["Proposal","We plan to merge the Platform and Data teams under one director from 1 February and close the Lisbon office lease when it ends in June."]]},{"id":"D-07","title":"On-call runbook","source":"confluence","path":"ENG / Operations","owner":"maya","groups":["eng","contractors"],"discoverable":true,"updated":"2026-10-05","review_by":"2027-04-05","sections":[["Severity levels","Sev1 means customers cannot ship or track parcels; page the on-call engineer and acknowledge within 5 minutes. Sev2 means a degraded feature; acknowledge within 30 minutes. Sev3 waits for working hours."],["During an incident","The first responder becomes incident commander until they hand over. Open a channel named inc-date-topic, post updates every 30 minutes for a Sev1, and write the postmortem within 5 working days."]]},{"id":"D-08","title":"How we deploy","source":"confluence","path":"ENG / Delivery","owner":"maya","groups":["eng","contractors"],"discoverable":true,"updated":"2026-06-20","review_by":"2026-12-20","sections":[["Reviews","Every change to main needs two approving reviews, one of them from a code owner. CI must be green before merge."],["Deploy windows","Production deploys run Monday to Thursday until 16:00 and on Friday until 14:00. There is a deploy freeze from 20 December to 3 January."]]},{"id":"D-09","title":"Production access","source":"confluence","path":"ENG / Security","owner":"maya","groups":["eng"],"discoverable":true,"updated":"2026-05-14","review_by":"2026-11-14","sections":[["Who gets access","Employees on the engineering on-call rota get production access through the access gateway, approved by their lead and renewed every 90 days. Contractors never get standing production access."],["Break-glass","In a Sev1, the incident commander can grant 4 hours of break-glass access; it is logged and reviewed the next day."]]},{"id":"D-10","title":"Discount approval matrix","source":"confluence","path":"SALES / Deal desk","owner":"ana","groups":["sales","finance","leadership"],"discoverable":true,"updated":"2026-07-01","review_by":"2027-01-01","sections":[["Who approves what","Account executives can give up to 10% discount on the first year. 10% to 20% needs the sales manager. Anything above 20%, or any multi-year price lock, needs the CFO."],["Paperwork","Log the approval in the deal record before sending the order form. Unlogged discounts are reversed at invoicing."]]},{"id":"D-11","title":"Customer data handling","source":"notion","path":"Company handbook / Security","owner":"maya","groups":["all_staff","contractors"],"discoverable":true,"updated":"2026-04-22","review_by":"2027-04-22","sections":[["Rules","Never copy customer data into personal tools, personal email or AI tools that are not on the approved list. Exports must be deleted within 30 days or when the ticket closes, whichever is first."],["Requests from customers","Forward any deletion or access request to the privacy inbox the same day. We have 30 days to answer under GDPR."]]},{"id":"D-12","title":"Laptops and home office","source":"notion","path":"Company handbook / Equipment","owner":"ruth","groups":["all_staff","contractors"],"discoverable":true,"updated":"2026-01-30","review_by":"2027-01-30","sections":[["Laptops","Employees and contractors get a company laptop, replaced every three years. Lost or stolen laptops must be reported to IT within 24 hours."],["Home office budget","Employees get a one-off EUR 400 home office budget in their first year and EUR 150 per year after that. Contractors are not eligible."]]},{"id":"D-13","title":"Reporting a security incident","source":"notion","path":"Company handbook / Security","owner":"maya","groups":["all_staff","contractors"],"discoverable":true,"updated":"2026-08-09","review_by":"2027-08-09","sections":[["What to do","If you click a suspicious link, lose a device or see data where it should not be, post in the security channel or page security within 1 hour. Do not try to investigate it yourself."]]},{"id":"D-14","title":"Benefits overview","source":"confluence","path":"HR / Benefits","owner":"ruth","groups":["all_staff"],"discoverable":true,"updated":"2025-04-10","review_by":"2026-04-10","sections":[["Health and wellbeing","Private health insurance covers you and your dependants from your first day. The wellbeing allowance is EUR 40 per month for gym, sport or therapy."],["Learning","Each employee has a EUR 1,200 yearly learning budget for courses, books and conferences, approved by their manager."]]},{"id":"D-15","title":"Board pack Q3 2026","source":"drive","path":"Leadership / Board","owner":"leo","groups":["leadership"],"discoverable":false,"updated":"2026-10-20","review_by":"2027-01-20","canary":"EUR 4.2 million","sections":[["Results","Q3 revenue was EUR 4.2 million, 6% under plan, with net revenue retention of 108%. Runway is 22 months."]]},{"id":"D-16","title":"Contractor guide","source":"confluence","path":"HR / Contractors","owner":"ruth","groups":["contractors","people_ops"],"discoverable":true,"updated":"2026-05-05","review_by":"2027-05-05","sections":[["Invoicing","Contractors invoice monthly by the 5th working day, with hours by project. Invoices are paid within 14 days."],["Time off","Contractors are not on the employee leave scheme; tell your project lead about planned absences two weeks ahead."]]},{"id":"D-17","title":"Engineering career ladder","source":"confluence","path":"ENG / People","owner":"maya","groups":["all_staff"],"discoverable":true,"updated":"2026-02-15","review_by":"2027-02-15","sections":[["Levels","Engineering has five levels, L1 to L5. Promotions are decided twice a year, in March and September, by a panel of two leads who did not manage you."]]},{"id":"D-18","title":"Payroll calendar","source":"drive","path":"Finance / Payroll","owner":"ana","groups":["all_staff"],"discoverable":true,"updated":"2026-01-05","review_by":"2027-01-05","sections":[["Pay day","Salaries are paid on the 25th of each month, or the last working day before it. In December pay day is 20 December."],["Payslips","Payslips appear in the HR portal two working days before pay day."]]},{"id":"FAQ-05","title":"FAQ: What is the wifi password for guests?","source":"lantern","path":"Lantern / Answered questions","owner":"ruth","groups":["all_staff","contractors"],"discoverable":true,"updated":"2026-11-24","review_by":"2027-05-24","sections":[["Answer","The guest wifi password is shown on the reception screen and changes every Monday."]]}],"cases":[{"id":"Q-01","who":"maya","where":null,"q":"What is the per diem for meals when I travel?","expect":"answer","doc":"D-01"},{"id":"Q-02","who":"jonas","where":"ask-people-ops","q":"How many weeks of parental leave does the primary caregiver get?","expect":"answer","doc":"D-03","vis":"channel"},{"id":"Q-03","who":"maya","where":"ask-people-ops","q":"Can I carry over unused vacation days?","expect":"answer","doc":"D-04","vis":"channel"},{"id":"Q-04","who":"ana","where":null,"q":"When is pay day in December?","expect":"answer","doc":"D-18"},{"id":"Q-05","who":"jonas","where":null,"q":"What is the hotel cap per night in London?","expect":"answer","doc":"D-01"},{"id":"Q-06","who":"maya","where":null,"q":"How much can I spend on courses and conferences each year?","expect":"answer","doc":"D-14"},{"id":"Q-07","who":"ruth","where":null,"q":"How long do I have to submit receipts for expenses?","expect":"answer","doc":"D-01"},{"id":"Q-08","who":"maya","where":null,"q":"When are engineering promotions decided?","expect":"answer","doc":"D-17"},{"id":"Q-09","who":"jonas","where":null,"q":"Who has to approve an expense over 500 euros?","expect":"answer","doc":"D-01"},{"id":"Q-10","who":"leo","where":null,"q":"How much is the wellbeing allowance for the gym?","expect":"answer","doc":"D-14"},{"id":"Q-11","who":"maya","where":"eng-help","q":"Can we deploy to production on Friday afternoon?","expect":"answer","doc":"D-08","vis":"channel"},{"id":"Q-12","who":"dev","where":"eng-help","q":"How fast do I need to acknowledge a Sev1 page when on call?","expect":"answer","doc":"D-07","vis":"channel"},{"id":"Q-13","who":"maya","where":"eng-help","q":"Who gets production access and how often is it renewed?","expect":"answer","doc":"D-09","vis":"ephemeral"},{"id":"Q-14","who":"jonas","where":"sales-floor","q":"Who approves a 15% discount on a deal?","expect":"answer","doc":"D-10","vis":"channel"},{"id":"Q-15","who":"dev","where":null,"q":"When do contractors send invoices?","expect":"answer","doc":"D-16"},{"id":"Q-16","who":"dev","where":null,"q":"Do I get a laptop and is it replaced?","expect":"answer","doc":"D-12"},{"id":"Q-17","who":"maya","where":null,"q":"What is the salary band for an engineer L3?","expect":"restricted","doc":"D-05"},{"id":"Q-18","who":"maya","where":null,"q":"Who approves a discount above 20%?","expect":"restricted","doc":"D-10"},{"id":"Q-19","who":"dev","where":null,"q":"Can contractors get production access through the access gateway?","expect":"restricted","doc":"D-09"},{"id":"Q-20","who":"dev","where":null,"q":"How many weeks of parental leave do we get?","expect":"answer","doc":"D-16"},{"id":"Q-21","who":"maya","where":null,"q":"Are the Platform and Data teams going to merge?","expect":"unknown","doc":null},{"id":"Q-22","who":"jonas","where":null,"q":"What was Q3 revenue against plan and what is the runway?","expect":"unknown","doc":null},{"id":"Q-23","who":"leo","where":null,"q":"What was Q3 revenue against plan and what is the runway?","expect":"answer","doc":"D-15"},{"id":"Q-24","who":"ruth","where":null,"q":"What is the salary band for an engineer L3?","expect":"answer","doc":"D-05"},{"id":"Q-25","who":"jonas","where":"ask-people-ops","q":"Can I bring my dog to the office?","expect":"unknown","doc":null,"vis":"channel"},{"id":"Q-26","who":"maya","where":null,"q":"Is there a company car scheme?","expect":"unknown","doc":null},{"id":"Q-27","who":"ana","where":null,"q":"What is the wifi password for guests?","expect":"unknown","doc":null},{"id":"Q-28","who":"ana","where":"ask-people-ops","q":"Who approves a discount above 20% or a multi-year price lock?","expect":"answer","doc":"D-10","vis":"ephemeral"},{"id":"Q-29","who":"ruth","where":"ask-people-ops","q":"What is the salary band for an account executive?","expect":"answer","doc":"D-05","vis":"ephemeral"},{"id":"Q-30","who":"jonas","where":null,"q":"What is the daily allowance for meals on business travel?","expect":"answer","doc":"D-01"}],"messages":[{"id":"M-001","asker":"maya","channel":null,"question":"What is the per diem for meals when I travel?","decision":"answer","doc":"D-01","chunks":["D-01#1"],"terms":["diem","meal","per","travel"],"text":"Meals on business travel are covered at EUR 55 per day. Hotels are capped at EUR 160 a night (EUR 220 in London, Paris and Zurich), and booking through the travel desk applies the rate for you.","stale":false,"superseded_seen":["D-02"],"owner":"ana","retrieved":["D-01#1","D-02#1","D-14#1","D-12#2"],"visibility":"dm","draft":{"status":"accepted"},"feedback":[],"case":"Q-01"},{"id":"M-002","asker":"jonas","channel":"ask-people-ops","question":"How many weeks of parental leave does the primary caregiver get?","decision":"answer","doc":"D-03","chunks":["D-03#1"],"terms":["caregiver","leave","parental","primary","week"],"text":"The primary caregiver gets 20 weeks of parental leave at full pay, and the secondary caregiver gets 6 weeks. You can split it into up to three blocks within 18 months.","stale":false,"superseded_seen":[],"owner":"ruth","retrieved":["D-03#1","D-03#2","D-04#2","D-04#1"],"visibility":"channel","draft":{"status":"accepted"},"feedback":[],"case":"Q-02"},{"id":"M-003","asker":"maya","channel":"ask-people-ops","question":"Can I carry over unused vacation days?","decision":"answer","doc":"D-04","chunks":["D-04#1"],"terms":["carry","day","leave","over","unused"],"text":"Yes, up to 5 unused days carry over, but you have to use them by 31 March.","stale":true,"superseded_seen":[],"owner":"ruth","retrieved":["D-04#1","D-04#2","D-01#3","D-03#1"],"visibility":"channel","draft":{"status":"accepted"},"feedback":[],"case":"Q-03"},{"id":"M-004","asker":"ana","channel":null,"question":"When is pay day in December?","decision":"answer","doc":"D-18","chunks":["D-18#1"],"terms":["day","december","pay"],"text":"In December pay day is 20 December. In other months salaries are paid on the 25th, or the last working day before it.","stale":false,"superseded_seen":[],"owner":"ana","retrieved":["D-18#1","D-18#2","D-03#1","D-04#2"],"visibility":"dm","draft":{"status":"accepted"},"feedback":[],"case":"Q-04"},{"id":"M-005","asker":"jonas","channel":null,"question":"What is the hotel cap per night in London?","decision":"answer","doc":"D-01","chunks":["D-01#1"],"terms":["cap","hotel","london","night","per"],"text":"In London the hotel cap is EUR 220 per night (EUR 160 elsewhere, except Paris and Zurich, which are also EUR 220).","stale":false,"superseded_seen":["D-02"],"owner":"ana","retrieved":["D-01#1","D-02#1","D-14#1","D-12#2"],"visibility":"dm","draft":{"status":"accepted"},"feedback":[],"case":"Q-05"},{"id":"M-006","asker":"maya","channel":null,"question":"How much can I spend on courses and conferences each year?","decision":"answer","doc":"D-14","chunks":["D-14#2"],"terms":["conference","course","each","spend","year"],"text":"You have a EUR 1,200 learning budget each year for courses, books and conferences; your manager approves it.","stale":true,"superseded_seen":[],"owner":"ruth","retrieved":["D-14#2","D-01#3","D-18#1","D-12#2"],"visibility":"dm","draft":{"status":"accepted"},"feedback":[],"case":"Q-06"},{"id":"M-007","asker":"ruth","channel":null,"question":"How long do I have to submit receipts for expenses?","decision":"answer","doc":"D-01","chunks":["D-01#2"],"terms":["expense","long","receipt","submit"],"text":"Submit the expense with its receipt within 30 days. Anything older than 90 days is not reimbursed.","stale":false,"superseded_seen":["D-02"],"owner":"ana","retrieved":["D-01#2","D-02#2","D-01#3","D-01#1"],"visibility":"dm","draft":{"status":"accepted"},"feedback":[["ruth","helpful"]],"case":"Q-07"},{"id":"M-008","asker":"maya","channel":null,"question":"When are engineering promotions decided?","decision":"answer","doc":"D-17","chunks":["D-17#1"],"terms":["decided","engineering","promotion"],"text":"Twice a year, in March and September, by a panel of two leads who did not manage you.","stale":false,"superseded_seen":[],"owner":"maya","retrieved":["D-17#1","D-09#1"],"visibility":"dm","draft":{"status":"accepted"},"feedback":[],"case":"Q-08"},{"id":"M-009","asker":"jonas","channel":null,"question":"Who has to approve an expense over 500 euros?","decision":"answer","doc":"D-01","chunks":["D-01#3"],"terms":["500","approval","euro","expense","over"],"text":"Any single expense over EUR 500 needs your manager's approval before you spend it. Flights over EUR 900 also need approval from Finance.","stale":false,"superseded_seen":["D-02"],"owner":"ana","retrieved":["D-01#3","D-01#2","D-10#2","D-10#1"],"visibility":"dm","draft":{"status":"rejected","reason":"states 300, which is not in the cited passages","text":"Anything over EUR 300 needs your manager's approval first, and flights also need Finance. [D-01#3]"},"feedback":[],"case":"Q-09"},{"id":"M-010","asker":"leo","channel":null,"question":"How much is the wellbeing allowance for the gym?","decision":"answer","doc":"D-14","chunks":["D-14#1"],"terms":["allowance","wellbeing"],"text":"The wellbeing allowance is EUR 40 per month and covers the gym, sport or therapy.","stale":true,"superseded_seen":[],"owner":"ruth","retrieved":["D-14#1","D-01#1","D-02#1"],"visibility":"dm","draft":{"status":"accepted"},"feedback":[],"case":"Q-10"},{"id":"M-011","asker":"maya","channel":"eng-help","question":"Can we deploy to production on Friday afternoon?","decision":"answer","doc":"D-08","chunks":["D-08#2"],"terms":["afternoon","deploy","friday","production"],"text":"Yes, but only until 14:00 on Fridays (Monday to Thursday until 16:00). Nothing goes out between 20 December and 3 January.","stale":false,"superseded_seen":[],"owner":"maya","retrieved":["D-08#2","D-08#1"],"visibility":"channel","draft":{"status":"accepted"},"feedback":[["maya","outdated"]],"case":"Q-11"},{"id":"M-012","asker":"dev","channel":"eng-help","question":"How fast do I need to acknowledge a Sev1 page when on call?","decision":"answer","doc":"D-07","chunks":["D-07#1"],"terms":["acknowledge","call","fast","need","page","sev1"],"text":"Sev1 means customers cannot ship or track parcels; page the on-call engineer and acknowledge within 5 minutes.","stale":false,"superseded_seen":[],"owner":"maya","retrieved":["D-07#1","D-07#2","D-13#1","D-08#1"],"visibility":"channel","draft":{"status":"rejected","reason":"cites D-09#2, which was not among the passages this reader may see","text":"Acknowledge a Sev1 page within 5 minutes; if it needs production access, the incident commander can grant 4 hours of break-glass access. [D-07#1] [D-09#2]"},"feedback":[],"case":"Q-12"},{"id":"M-013","asker":"maya","channel":"eng-help","question":"Who gets production access and how often is it renewed?","decision":"answer","doc":"D-09","chunks":["D-09#1"],"terms":["access","get","often","production","renewed"],"text":"Employees on the engineering on-call rota get production access through the access gateway, approved by their lead. It has to be renewed every 90 days, and contractors never get standing access.","stale":true,"superseded_seen":[],"owner":"maya","retrieved":["D-09#1","D-09#2","D-03#1","D-11#2"],"visibility":"ephemeral","why_private":"uses a document not everyone in this channel can read","draft":{"status":"accepted"},"feedback":[],"case":"Q-13"},{"id":"M-014","asker":"jonas","channel":"sales-floor","question":"Who approves a 15% discount on a deal?","decision":"answer","doc":"D-10","chunks":["D-10#1","D-10#2"],"terms":["15","approval","deal","discount"],"text":"A 15% discount needs your sales manager's approval (you can go up to 10% yourself). Log the approval in the deal record before you send the order form.","stale":false,"superseded_seen":[],"owner":"ana","retrieved":["D-10#2","D-10#1","D-01#3","D-14#2"],"visibility":"channel","draft":{"status":"accepted"},"feedback":[],"case":"Q-14"},{"id":"M-015","asker":"dev","channel":null,"question":"When do contractors send invoices?","decision":"answer","doc":"D-16","chunks":["D-16#1"],"terms":["contractor","invoice","send"],"text":"Invoice monthly by the 5th working day, with your hours by project. Invoices are paid within 14 days.","stale":false,"superseded_seen":[],"owner":"ruth","retrieved":["D-16#1","D-16#2","D-12#1","D-12#2"],"visibility":"dm","draft":{"status":"accepted"},"feedback":[],"case":"Q-15"},{"id":"M-016","asker":"dev","channel":null,"question":"Do I get a laptop and is it replaced?","decision":"answer","doc":"D-12","chunks":["D-12#1"],"terms":["laptop","replaced"],"text":"Yes, contractors get a company laptop too, replaced every three years. Report a lost or stolen one to IT within 24 hours.","stale":false,"superseded_seen":[],"owner":"ruth","retrieved":["D-12#1","D-12#2"],"visibility":"dm","draft":{"status":"accepted"},"feedback":[],"case":"Q-16"},{"id":"M-017","asker":"maya","channel":null,"question":"What is the salary band for an engineer L3?","decision":"restricted","doc":"D-05","owner":"ruth","terms":["band","engineer","l3","salary"],"chunks":[],"retrieved":[],"visibility":"dm","draft":null,"feedback":[],"case":"Q-17"},{"id":"M-018","asker":"maya","channel":null,"question":"Who approves a discount above 20%?","decision":"restricted","doc":"D-10","owner":"ana","terms":["20","above","approval","discount"],"chunks":[],"retrieved":[],"visibility":"dm","draft":null,"feedback":[],"case":"Q-18"},{"id":"M-019","asker":"dev","channel":null,"question":"Can contractors get production access through the access gateway?","decision":"restricted","doc":"D-09","owner":"maya","terms":["access","contractor","gateway","production","through"],"chunks":[],"retrieved":[],"visibility":"dm","draft":null,"feedback":[],"case":"Q-19"},{"id":"M-020","asker":"dev","channel":null,"question":"How many weeks of parental leave do we get?","decision":"answer","doc":"D-16","chunks":["D-16#2"],"terms":["leave","parental","week"],"text":"Contractors are not on the employee leave scheme, so parental leave works through your contract. Tell your project lead about planned absences two weeks ahead.","stale":false,"superseded_seen":[],"owner":"ruth","retrieved":["D-16#2","D-12#2"],"visibility":"dm","draft":{"status":"accepted"},"feedback":[],"case":"Q-20"},{"id":"M-021","asker":"maya","channel":null,"question":"Are the Platform and Data teams going to merge?","decision":"unknown","doc":null,"owner":"ruth","near":"D-08","terms":["data","going","merge","platform","team"],"chunks":[],"retrieved":["D-08#1","D-11#1","D-11#2","D-13#1"],"visibility":"dm","draft":null,"feedback":[],"case":"Q-21"},{"id":"M-022","asker":"jonas","channel":null,"question":"What was Q3 revenue against plan and what is the runway?","decision":"unknown","doc":null,"owner":"ruth","near":"D-04","terms":["against","plan","q3","revenue","runway"],"chunks":[],"retrieved":["D-04#2","D-03#2"],"visibility":"dm","draft":null,"feedback":[],"case":"Q-22"},{"id":"M-023","asker":"leo","channel":null,"question":"What was Q3 revenue against plan and what is the runway?","decision":"answer","doc":"D-15","chunks":["D-15#1"],"terms":["against","plan","q3","revenue","runway"],"text":"Q3 revenue was EUR 4.2 million, 6% under plan. Runway is 22 months.","stale":false,"superseded_seen":[],"owner":"leo","retrieved":["D-15#1","D-04#2","D-03#2","D-06#1"],"visibility":"dm","draft":{"status":"accepted"},"feedback":[],"case":"Q-23"},{"id":"M-024","asker":"ruth","channel":null,"question":"What is the salary band for an engineer L3?","decision":"answer","doc":"D-05","chunks":["D-05#1"],"terms":["band","engineer","l3","salary"],"text":"Engineer L3 is EUR 64,000 to EUR 78,000.","stale":false,"superseded_seen":[],"owner":"ruth","retrieved":["D-05#1","D-05#2","D-18#1"],"visibility":"dm","draft":{"status":"accepted"},"feedback":[],"case":"Q-24"},{"id":"M-025","asker":"jonas","channel":"ask-people-ops","question":"Can I bring my dog to the office?","decision":"unknown","doc":null,"owner":"ruth","near":"D-12","terms":["bring","dog","office"],"chunks":[],"retrieved":["D-12#2","D-12#1"],"visibility":"channel","draft":null,"feedback":[],"case":"Q-25"},{"id":"M-026","asker":"maya","channel":null,"question":"Is there a company car scheme?","decision":"unknown","doc":null,"owner":"ruth","near":"D-12","terms":["car","company","scheme"],"chunks":[],"retrieved":["D-12#1"],"visibility":"dm","draft":null,"feedback":[],"case":"Q-26"},{"id":"M-027","asker":"ana","channel":null,"question":"What is the wifi password for guests?","decision":"unknown","doc":null,"owner":"ruth","near":null,"terms":["guest","password","wifi"],"chunks":[],"retrieved":[],"visibility":"dm","draft":null,"feedback":[],"case":"Q-27"},{"id":"M-028","asker":"ana","channel":"ask-people-ops","question":"Who approves a discount above 20% or a multi-year price lock?","decision":"answer","doc":"D-10","chunks":["D-10#1"],"terms":["20","above","approval","discount","lock","multi","price","year"],"text":"Above 20%, or for any multi-year price lock, the CFO has to approve.","stale":false,"superseded_seen":[],"owner":"ana","retrieved":["D-10#1","D-10#2","D-12#2","D-01#3"],"visibility":"ephemeral","why_private":"uses a document not everyone in this channel can read","draft":{"status":"accepted"},"feedback":[],"case":"Q-28"},{"id":"M-029","asker":"ruth","channel":"ask-people-ops","question":"What is the salary band for an account executive?","decision":"answer","doc":"D-05","chunks":["D-05#2"],"terms":["account","band","executive","salary"],"text":"Account executive base salary is EUR 48,000 to EUR 60,000, with on-target earnings up to EUR 95,000.","stale":false,"superseded_seen":[],"owner":"ruth","retrieved":["D-05#2","D-05#1","D-18#1"],"visibility":"ephemeral","why_private":"uses a document not everyone in this channel can read","draft":{"status":"accepted"},"feedback":[],"case":"Q-29"},{"id":"M-030","asker":"jonas","channel":null,"question":"What is the daily allowance for meals on business travel?","decision":"answer","doc":"D-01","chunks":["D-01#1"],"terms":["allowance","business","daily","meal","travel"],"text":"The daily allowance for meals on business travel is EUR 55 per day.","stale":false,"superseded_seen":["D-02"],"owner":"ana","retrieved":["D-01#1","D-02#1","D-14#1","D-01#3"],"visibility":"dm","draft":{"status":"rejected","reason":"cites D-02#1 from an archived version","text":"The meal allowance is EUR 45 per day on business travel. [D-02#1]"},"feedback":[],"case":"Q-30"}],"gaps":[{"id":"G-01","question":"Are the Platform and Data teams going to merge?","asker":"maya","channel":null,"owner":"ruth","state":"open","kind":"no answer","history":[["open","maya"]]},{"id":"G-02","question":"What was Q3 revenue against plan and what is the runway?","asker":"jonas","channel":null,"owner":"ruth","state":"dismissed","kind":"no answer","history":[["open","jonas"],["dismissed","leo"]],"reason":"Board figures are shared at the all-hands, not through Lantern"},{"id":"G-03","question":"Can I bring my dog to the office?","asker":"jonas","channel":"ask-people-ops","owner":"ruth","state":"open","kind":"no answer","history":[["open","jonas"]]},{"id":"G-04","question":"Is there a company car scheme?","asker":"maya","channel":null,"owner":"ana","state":"answered","kind":"no answer","history":[["open","maya"],["assigned","ruth"],["answered","ana"]],"answer":"There is no company car scheme. Use the travel desk for rental cars on business trips.","groups":["all_staff"]},{"id":"G-05","question":"What is the wifi password for guests?","asker":"ana","channel":null,"owner":"ruth","state":"published","kind":"no answer","history":[["open","ana"],["assigned","ruth"],["answered","ruth"],["published","ruth"]],"answer":"The guest wifi password is shown on the reception screen and changes every Monday.","groups":["all_staff","contractors"],"doc":"FAQ-05"}],"reviews":[{"doc":"D-04","owner":"ruth","reason":"review date 2026-09-18 has passed","state":"open"},{"doc":"D-09","owner":"maya","reason":"review date 2026-11-14 has passed","state":"open"},{"doc":"D-14","owner":"ruth","reason":"review date 2026-04-10 has passed","state":"open"},{"doc":"D-08","owner":"maya","reason":"flagged outdated by maya","state":"open"}],"audit":[{"seq":1,"actor":"maya","action":"question","message":"M-001","decision":"answer","visibility":"dm","docs":["D-01"],"withheld_docs":5,"question":"What is the per diem for meals when I travel?","draft":"accepted"},{"seq":2,"actor":"jonas","action":"question","message":"M-002","decision":"answer","visibility":"channel","docs":["D-03"],"withheld_docs":7,"question":"How many weeks of parental leave does the primary caregiver get?","draft":"accepted"},{"seq":3,"actor":"maya","action":"question","message":"M-003","decision":"answer","visibility":"channel","docs":["D-04"],"withheld_docs":5,"question":"Can I carry over unused vacation days?","draft":"accepted"},{"seq":4,"actor":"ana","action":"question","message":"M-004","decision":"answer","visibility":"dm","docs":["D-18"],"withheld_docs":7,"question":"When is pay day in December?","draft":"accepted"},{"seq":5,"actor":"jonas","action":"question","message":"M-005","decision":"answer","visibility":"dm","docs":["D-01"],"withheld_docs":7,"question":"What is the hotel cap per night in London?","draft":"accepted"},{"seq":6,"actor":"maya","action":"question","message":"M-006","decision":"answer","visibility":"dm","docs":["D-14"],"withheld_docs":5,"question":"How much can I spend on courses and conferences each year?","draft":"accepted"},{"seq":7,"actor":"ruth","action":"question","message":"M-007","decision":"answer","visibility":"dm","docs":["D-01"],"withheld_docs":6,"question":"How long do I have to submit receipts for expenses?","draft":"accepted"},{"seq":8,"actor":"maya","action":"question","message":"M-008","decision":"answer","visibility":"dm","docs":["D-17"],"withheld_docs":5,"question":"When are engineering promotions decided?","draft":"accepted"},{"seq":9,"actor":"jonas","action":"question","message":"M-009","decision":"answer","visibility":"dm","docs":["D-01"],"withheld_docs":7,"question":"Who has to approve an expense over 500 euros?","draft":"rejected"},{"seq":10,"actor":"leo","action":"question","message":"M-010","decision":"answer","visibility":"dm","docs":["D-14"],"withheld_docs":4,"question":"How much is the wellbeing allowance for the gym?","draft":"accepted"},{"seq":11,"actor":"maya","action":"question","message":"M-011","decision":"answer","visibility":"channel","docs":["D-08"],"withheld_docs":5,"question":"Can we deploy to production on Friday afternoon?","draft":"accepted"},{"seq":12,"actor":"dev","action":"question","message":"M-012","decision":"answer","visibility":"channel","docs":["D-07"],"withheld_docs":12,"question":"How fast do I need to acknowledge a Sev1 page when on call?","draft":"rejected"},{"seq":13,"actor":"maya","action":"question","message":"M-013","decision":"answer","visibility":"ephemeral","docs":["D-09"],"withheld_docs":5,"question":"Who gets production access and how often is it renewed?","draft":"accepted"},{"seq":14,"actor":"jonas","action":"question","message":"M-014","decision":"answer","visibility":"channel","docs":["D-10"],"withheld_docs":7,"question":"Who approves a 15% discount on a deal?","draft":"accepted"},{"seq":15,"actor":"dev","action":"question","message":"M-015","decision":"answer","visibility":"dm","docs":["D-16"],"withheld_docs":12,"question":"When do contractors send invoices?","draft":"accepted"},{"seq":16,"actor":"dev","action":"question","message":"M-016","decision":"answer","visibility":"dm","docs":["D-12"],"withheld_docs":12,"question":"Do I get a laptop and is it replaced?","draft":"accepted"},{"seq":17,"actor":"maya","action":"question","message":"M-017","decision":"restricted","visibility":"dm","docs":[],"withheld_docs":5,"question":"What is the salary band for an engineer L3?","draft":null},{"seq":18,"actor":"maya","action":"question","message":"M-018","decision":"restricted","visibility":"dm","docs":[],"withheld_docs":5,"question":"Who approves a discount above 20%?","draft":null},{"seq":19,"actor":"dev","action":"question","message":"M-019","decision":"restricted","visibility":"dm","docs":[],"withheld_docs":12,"question":"Can contractors get production access through the access gateway?","draft":null},{"seq":20,"actor":"dev","action":"question","message":"M-020","decision":"answer","visibility":"dm","docs":["D-16"],"withheld_docs":12,"question":"How many weeks of parental leave do we get?","draft":"accepted"},{"seq":21,"actor":"maya","action":"question","message":"M-021","decision":"unknown","visibility":"dm","docs":[],"withheld_docs":5,"question":"Are the Platform and Data teams going to merge?","draft":null},{"seq":22,"actor":"jonas","action":"question","message":"M-022","decision":"unknown","visibility":"dm","docs":[],"withheld_docs":7,"question":"What was Q3 revenue against plan and what is the runway?","draft":null},{"seq":23,"actor":"leo","action":"question","message":"M-023","decision":"answer","visibility":"dm","docs":["D-15"],"withheld_docs":4,"question":"What was Q3 revenue against plan and what is the runway?","draft":"accepted"},{"seq":24,"actor":"ruth","action":"question","message":"M-024","decision":"answer","visibility":"dm","docs":["D-05"],"withheld_docs":6,"question":"What is the salary band for an engineer L3?","draft":"accepted"},{"seq":25,"actor":"jonas","action":"question","message":"M-025","decision":"unknown","visibility":"channel","docs":[],"withheld_docs":7,"question":"Can I bring my dog to the office?","draft":null},{"seq":26,"actor":"maya","action":"question","message":"M-026","decision":"unknown","visibility":"dm","docs":[],"withheld_docs":5,"question":"Is there a company car scheme?","draft":null},{"seq":27,"actor":"ana","action":"question","message":"M-027","decision":"unknown","visibility":"dm","docs":[],"withheld_docs":7,"question":"What is the wifi password for guests?","draft":null},{"seq":28,"actor":"ana","action":"question","message":"M-028","decision":"answer","visibility":"ephemeral","docs":["D-10"],"withheld_docs":7,"question":"Who approves a discount above 20% or a multi-year price lock?","draft":"accepted"},{"seq":29,"actor":"ruth","action":"question","message":"M-029","decision":"answer","visibility":"ephemeral","docs":["D-05"],"withheld_docs":6,"question":"What is the salary band for an account executive?","draft":"accepted"},{"seq":30,"actor":"jonas","action":"question","message":"M-030","decision":"answer","visibility":"dm","docs":["D-01"],"withheld_docs":7,"question":"What is the daily allowance for meals on business travel?","draft":"rejected"},{"seq":31,"actor":"ruth","action":"feedback","message":"M-007","kind":"helpful"},{"seq":32,"actor":"maya","action":"feedback","message":"M-011","kind":"outdated"},{"seq":33,"actor":"leo","action":"gap dismiss","gap":"G-02","state":"dismissed"},{"seq":34,"actor":"ruth","action":"gap assign","gap":"G-04","state":"assigned"},{"seq":35,"actor":"ana","action":"gap answer","gap":"G-04","state":"answered"},{"seq":36,"actor":"ruth","action":"gap assign","gap":"G-05","state":"assigned"},{"seq":37,"actor":"ruth","action":"gap answer","gap":"G-05","state":"answered"},{"seq":38,"actor":"ruth","action":"gap publish","gap":"G-05","state":"published"}],"sync":[{"source":"confluence","name":"Confluence","scope":"Spaces HR, ENG, SALES","last_sync":"2026-11-24 08:00","docs":[{"doc":"D-03","title":"Parental leave","native":["confluence-users"],"groups":["all_staff"]},{"doc":"D-07","title":"On-call runbook","native":["eng-space","contractor-access"],"groups":["eng","contractors"]},{"doc":"D-08","title":"How we deploy","native":["eng-space","contractor-access"],"groups":["eng","contractors"]},{"doc":"D-09","title":"Production access","native":["eng-space"],"groups":["eng"]},{"doc":"D-10","title":"Discount approval matrix","native":["sales-space","finance-space","leadership-space"],"groups":["sales","finance","leadership"]},{"doc":"D-14","title":"Benefits overview","native":["confluence-users"],"groups":["all_staff"]},{"doc":"D-16","title":"Contractor guide","native":["contractor-access","hr-space"],"groups":["contractors","people_ops"]},{"doc":"D-17","title":"Engineering career ladder","native":["confluence-users"],"groups":["all_staff"]}],"warnings":[]},{"source":"drive","name":"Google Drive","scope":"Shared drives Finance, People, Leadership","last_sync":"2026-11-24 08:05","docs":[{"doc":"D-01","title":"Travel and expenses policy 2026","native":["everyone@fernhill.example"],"groups":["all_staff"]},{"doc":"D-02","title":"Travel policy 2024","native":["everyone@fernhill.example"],"groups":["all_staff"]},{"doc":"D-05","title":"Salary bands 2026","native":["people@fernhill.example","leadership@fernhill.example"],"groups":["people_ops","leadership"]},{"doc":"D-06","title":"Q1 organisation changes (draft)","native":["leadership@fernhill.example"],"groups":["leadership"]},{"doc":"D-15","title":"Board pack Q3 2026","native":["leadership@fernhill.example","board-observer@outside.example"],"groups":["leadership"]},{"doc":"D-18","title":"Payroll calendar","native":["everyone@fernhill.example"],"groups":["all_staff"]}],"warnings":[{"doc":"D-15","principals":["board-observer@outside.example"],"effect":"ignored; only mapped groups can see it here"}]},{"source":"notion","name":"Notion","scope":"Workspace Company handbook","last_sync":"2026-11-24 08:10","docs":[{"doc":"D-04","title":"Time off and public holidays","native":["workspace-members"],"groups":["all_staff"]},{"doc":"D-11","title":"Customer data handling","native":["workspace-members","guests:contractors","guests:auditor-2026"],"groups":["all_staff","contractors"]},{"doc":"D-12","title":"Laptops and home office","native":["workspace-members","guests:contractors"],"groups":["all_staff","contractors"]},{"doc":"D-13","title":"Reporting a security incident","native":["workspace-members","guests:contractors"],"groups":["all_staff","contractors"]}],"warnings":[{"doc":"D-11","principals":["guests:auditor-2026"],"effect":"ignored; only mapped groups can see it here"}]}],"evals":{"cases":[{"id":"Q-01","who":"maya","where":null,"q":"What is the per diem for meals when I travel?","expect":"answer","got":"answer","doc":"D-01","want_doc":"D-01","visibility":"dm","pass":true,"draft":{"status":"accepted"}},{"id":"Q-02","who":"jonas","where":"ask-people-ops","q":"How many weeks of parental leave does the primary caregiver get?","expect":"answer","got":"answer","doc":"D-03","want_doc":"D-03","visibility":"channel","pass":true,"draft":{"status":"accepted"}},{"id":"Q-03","who":"maya","where":"ask-people-ops","q":"Can I carry over unused vacation days?","expect":"answer","got":"answer","doc":"D-04","want_doc":"D-04","visibility":"channel","pass":true,"draft":{"status":"accepted"}},{"id":"Q-04","who":"ana","where":null,"q":"When is pay day in December?","expect":"answer","got":"answer","doc":"D-18","want_doc":"D-18","visibility":"dm","pass":true,"draft":{"status":"accepted"}},{"id":"Q-05","who":"jonas","where":null,"q":"What is the hotel cap per night in London?","expect":"answer","got":"answer","doc":"D-01","want_doc":"D-01","visibility":"dm","pass":true,"draft":{"status":"accepted"}},{"id":"Q-06","who":"maya","where":null,"q":"How much can I spend on courses and conferences each year?","expect":"answer","got":"answer","doc":"D-14","want_doc":"D-14","visibility":"dm","pass":true,"draft":{"status":"accepted"}},{"id":"Q-07","who":"ruth","where":null,"q":"How long do I have to submit receipts for expenses?","expect":"answer","got":"answer","doc":"D-01","want_doc":"D-01","visibility":"dm","pass":true,"draft":{"status":"accepted"}},{"id":"Q-08","who":"maya","where":null,"q":"When are engineering promotions decided?","expect":"answer","got":"answer","doc":"D-17","want_doc":"D-17","visibility":"dm","pass":true,"draft":{"status":"accepted"}},{"id":"Q-09","who":"jonas","where":null,"q":"Who has to approve an expense over 500 euros?","expect":"answer","got":"answer","doc":"D-01","want_doc":"D-01","visibility":"dm","pass":true,"draft":{"status":"rejected","reason":"states 300, which is not in the cited passages","text":"Anything over EUR 300 needs your manager's approval first, and flights also need Finance. [D-01#3]"}},{"id":"Q-10","who":"leo","where":null,"q":"How much is the wellbeing allowance for the gym?","expect":"answer","got":"answer","doc":"D-14","want_doc":"D-14","visibility":"dm","pass":true,"draft":{"status":"accepted"}},{"id":"Q-11","who":"maya","where":"eng-help","q":"Can we deploy to production on Friday afternoon?","expect":"answer","got":"answer","doc":"D-08","want_doc":"D-08","visibility":"channel","pass":true,"draft":{"status":"accepted"}},{"id":"Q-12","who":"dev","where":"eng-help","q":"How fast do I need to acknowledge a Sev1 page when on call?","expect":"answer","got":"answer","doc":"D-07","want_doc":"D-07","visibility":"channel","pass":true,"draft":{"status":"rejected","reason":"cites D-09#2, which was not among the passages this reader may see","text":"Acknowledge a Sev1 page within 5 minutes; if it needs production access, the incident commander can grant 4 hours of break-glass access. [D-07#1] [D-09#2]"}},{"id":"Q-13","who":"maya","where":"eng-help","q":"Who gets production access and how often is it renewed?","expect":"answer","got":"answer","doc":"D-09","want_doc":"D-09","visibility":"ephemeral","pass":true,"draft":{"status":"accepted"}},{"id":"Q-14","who":"jonas","where":"sales-floor","q":"Who approves a 15% discount on a deal?","expect":"answer","got":"answer","doc":"D-10","want_doc":"D-10","visibility":"channel","pass":true,"draft":{"status":"accepted"}},{"id":"Q-15","who":"dev","where":null,"q":"When do contractors send invoices?","expect":"answer","got":"answer","doc":"D-16","want_doc":"D-16","visibility":"dm","pass":true,"draft":{"status":"accepted"}},{"id":"Q-16","who":"dev","where":null,"q":"Do I get a laptop and is it replaced?","expect":"answer","got":"answer","doc":"D-12","want_doc":"D-12","visibility":"dm","pass":true,"draft":{"status":"accepted"}},{"id":"Q-17","who":"maya","where":null,"q":"What is the salary band for an engineer L3?","expect":"restricted","got":"restricted","doc":"D-05","want_doc":"D-05","visibility":"dm","pass":true,"draft":null},{"id":"Q-18","who":"maya","where":null,"q":"Who approves a discount above 20%?","expect":"restricted","got":"restricted","doc":"D-10","want_doc":"D-10","visibility":"dm","pass":true,"draft":null},{"id":"Q-19","who":"dev","where":null,"q":"Can contractors get production access through the access gateway?","expect":"restricted","got":"restricted","doc":"D-09","want_doc":"D-09","visibility":"dm","pass":true,"draft":null},{"id":"Q-20","who":"dev","where":null,"q":"How many weeks of parental leave do we get?","expect":"answer","got":"answer","doc":"D-16","want_doc":"D-16","visibility":"dm","pass":true,"draft":{"status":"accepted"}},{"id":"Q-21","who":"maya","where":null,"q":"Are the Platform and Data teams going to merge?","expect":"unknown","got":"unknown","doc":null,"want_doc":null,"visibility":"dm","pass":true,"draft":null},{"id":"Q-22","who":"jonas","where":null,"q":"What was Q3 revenue against plan and what is the runway?","expect":"unknown","got":"unknown","doc":null,"want_doc":null,"visibility":"dm","pass":true,"draft":null},{"id":"Q-23","who":"leo","where":null,"q":"What was Q3 revenue against plan and what is the runway?","expect":"answer","got":"answer","doc":"D-15","want_doc":"D-15","visibility":"dm","pass":true,"draft":{"status":"accepted"}},{"id":"Q-24","who":"ruth","where":null,"q":"What is the salary band for an engineer L3?","expect":"answer","got":"answer","doc":"D-05","want_doc":"D-05","visibility":"dm","pass":true,"draft":{"status":"accepted"}},{"id":"Q-25","who":"jonas","where":"ask-people-ops","q":"Can I bring my dog to the office?","expect":"unknown","got":"unknown","doc":null,"want_doc":null,"visibility":"channel","pass":true,"draft":null},{"id":"Q-26","who":"maya","where":null,"q":"Is there a company car scheme?","expect":"unknown","got":"unknown","doc":null,"want_doc":null,"visibility":"dm","pass":true,"draft":null},{"id":"Q-27","who":"ana","where":null,"q":"What is the wifi password for guests?","expect":"unknown","got":"unknown","doc":null,"want_doc":null,"visibility":"dm","pass":true,"draft":null},{"id":"Q-28","who":"ana","where":"ask-people-ops","q":"Who approves a discount above 20% or a multi-year price lock?","expect":"answer","got":"answer","doc":"D-10","want_doc":"D-10","visibility":"ephemeral","pass":true,"draft":{"status":"accepted"}},{"id":"Q-29","who":"ruth","where":"ask-people-ops","q":"What is the salary band for an account executive?","expect":"answer","got":"answer","doc":"D-05","want_doc":"D-05","visibility":"ephemeral","pass":true,"draft":{"status":"accepted"}},{"id":"Q-30","who":"jonas","where":null,"q":"What is the daily allowance for meals on business travel?","expect":"answer","got":"answer","doc":"D-01","want_doc":"D-01","visibility":"dm","pass":true,"draft":{"status":"rejected","reason":"cites D-02#1 from an archived version","text":"The meal allowance is EUR 45 per day on business travel. [D-02#1]"}}],"passed":30,"total":30,"answered_right":22,"answer_cases":22,"abstained_right":8,"abstain_cases":8,"probes":72,"leaks":[],"drafts_accepted":19,"drafts_rejected":[{"id":"Q-09","reason":"states 300, which is not in the cited passages"},{"id":"Q-12","reason":"cites D-09#2, which was not among the passages this reader may see"},{"id":"Q-30","reason":"cites D-02#1 from an archived version"}]},"engine":{"stop":["a","about","after","also","am","an","and","any","are","as","at","be","before","by","can","did","do","does","for","from","get","got","had","has","have","how","i","if","in","into","is","it","its","just","many","me","much","my","no","not","of","on","or","our","out","should","so","than","that","the","their","them","then","there","this","to","up","us","was","we","were","what","when","where","which","who","why","will","with","yes","you","your"],"synonyms":{"maternity":"parental","paternity":"parental","vacation":"leave","holiday":"leave","holidays":"leave","pto":"leave","wfh":"home","salaries":"salary","paycheck":"pay","payday":"pay","laptop":"laptops","gym":"wellbeing","deploying":"deploy","release":"deploy","prod":"production","discounts":"discount","hotel":"hotels","allowance":"allowance","expense":"expenses","reimburse":"reimbursed","oncall":"call","off":"leave","phishing":"suspicious","clicked":"click","hacked":"suspicious","approve":"approval","approves":"approval","approved":"approval","approvals":"approval"},"defaults":{"answer_threshold":4.0,"min_terms":2,"hint_restricted":true,"superseded_weight":0.4,"top_k":4},"now":"2026-11-24"}};</script>
+<script>// Browser port of lantern/engine.py. tests/test_parity.py runs this with node
+// on the same questions and requires the same decisions as the Python engine.
+(function (root) {
+  "use strict";
+  var CFG = root.LANTERN_CFG || (typeof module !== "undefined" ? null : null);
+
+  function make(cfg) {
+    var STOP = new Set(cfg.stop), SYN = cfg.synonyms, K1 = 1.5, B = 0.75;
+
+    function stem(t) {
+      if (t.length > 4 && t.endsWith("ies")) return t.slice(0, -3) + "y";
+      if (t.length > 3 && t.endsWith("s") && !t.endsWith("ss")) return t.slice(0, -1);
+      return t;
+    }
+    function tokenize(text) {
+      var out = [];
+      text.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(" ").forEach(function (t) {
+        if (!t) return;
+        if (Object.prototype.hasOwnProperty.call(SYN, t)) t = SYN[t];
+        if (STOP.has(t) || (t.length < 2 && !/^[0-9]$/.test(t))) return;
+        out.push(stem(t));
+      });
+      return out;
+    }
+    function chunksOf(docs) {
+      var out = [];
+      docs.forEach(function (d) {
+        d.sections.forEach(function (s, i) {
+          out.push({ id: d.id + "#" + (i + 1), doc: d.id, heading: s[0], text: s[1], search: d.title + " " + s[0] + " " + s[1] });
+        });
+      });
+      return out;
+    }
+    function Index(docs) {
+      this.docs = {};
+      this.order = [];
+      var self = this;
+      docs.forEach(function (d) { self.docs[d.id] = d; self.order.push(d.id); });
+      this.build();
+    }
+    Index.prototype.add = function (doc) {
+      if (!this.docs[doc.id]) this.order.push(doc.id);
+      this.docs[doc.id] = doc;
+      this.build();
+    };
+    Index.prototype.build = function () {
+      var self = this;
+      this.chunks = chunksOf(this.order.map(function (id) { return self.docs[id]; }));
+      this.tf = [];
+      var df = {};
+      this.chunks.forEach(function (c) {
+        var toks = tokenize(c.search), counts = {};
+        toks.forEach(function (t) { counts[t] = (counts[t] || 0) + 1; });
+        self.tf.push([counts, toks.length]);
+        Object.keys(counts).forEach(function (t) { df[t] = (df[t] || 0) + 1; });
+      });
+      var n = this.chunks.length, tot = 0;
+      this.tf.forEach(function (x) { tot += x[1]; });
+      this.avgdl = tot / n;
+      this.idf = {};
+      Object.keys(df).forEach(function (t) { self.idf[t] = Math.log(1 + (n - df[t] + 0.5) / (df[t] + 0.5)); });
+    };
+    Index.prototype.score = function (q, i) {
+      var counts = this.tf[i][0], dl = this.tf[i][1], s = 0;
+      for (var k = 0; k < q.length; k++) {
+        var f = counts[q[k]] || 0;
+        if (f) s += this.idf[q[k]] * f * (K1 + 1) / (f + K1 * (1 - B + B * dl / this.avgdl));
+      }
+      return s;
+    };
+    Index.prototype.search = function (question, ok, st) {
+      var q = Array.from(new Set(tokenize(question))).sort(), hits = [], self = this;
+      this.chunks.forEach(function (c, i) {
+        if (!ok(c.doc)) return;
+        var s = self.score(q, i);
+        if (s <= 0) return;
+        if (self.docs[c.doc].superseded_by) s *= st.superseded_weight;
+        var matched = q.filter(function (t) { return self.tf[i][0][t]; }).length;
+        hits.push({ chunk: c.id, doc: c.doc, score: Math.round(s * 1e6) / 1e6, matched: matched });
+      });
+      hits.sort(function (a, b) { return b.score - a.score || (a.chunk < b.chunk ? -1 : a.chunk > b.chunk ? 1 : 0); });
+      return [q, hits];
+    };
+
+    function canRead(ix, groups, docId) {
+      var g = ix.docs[docId].groups;
+      return groups.some(function (x) { return g.indexOf(x) >= 0; });
+    }
+    function visibleToAll(ix, members, docId, users) {
+      return members.every(function (m) { return canRead(ix, users[m].groups, docId); });
+    }
+    function strong(h, st) { return h.score >= st.answer_threshold && h.matched >= st.min_terms; }
+    function sentences(text) { return text.split(/(?<=\.)\s+/).map(function (s) { return s.trim(); }).filter(Boolean); }
+    function extract(chunk, q) {
+      var sents = sentences(chunk.text);
+      var scored = sents.map(function (s, i) {
+        var st = new Set(tokenize(s));
+        return [-q.filter(function (t) { return st.has(t); }).length, i];
+      });
+      scored.sort(function (a, b) { return a[0] - b[0] || a[1] - b[1]; });
+      var keep = [scored[0][0] < 0 ? scored[0][1] : 0];
+      if (scored.length > 1 && scored[1][0] <= -2) keep.push(scored[1][1]);
+      keep.sort(function (a, b) { return a - b; });
+      return keep.map(function (i) { return sents[i]; }).join(" ");
+    }
+    function decide(ix, question, canSee, settings) {
+      var st = Object.assign({}, cfg.defaults, settings || {});
+      var r = ix.search(question, canSee, st), q = r[0], hits = r[1];
+      var byId = {};
+      ix.chunks.forEach(function (c) { byId[c.id] = c; });
+      var top = hits.filter(function (h) { return !ix.docs[h.doc].superseded_by; });
+      var best = top[0] || null;
+      if (best && strong(best, st)) {
+        var doc = ix.docs[best.doc], cites = [best.chunk];
+        for (var k = 1; k < Math.min(top.length, st.top_k); k++) {
+          var h = top[k];
+          if (h.doc !== best.doc && strong(h, st) && h.score >= best.score * 0.8) { cites.push(h.chunk); break; }
+        }
+        var older = Array.from(new Set(hits.filter(function (h) { return ix.docs[h.doc].superseded_by === best.doc; }).map(function (h) { return h.doc; }))).sort();
+        return { decision: "answer", doc: best.doc, chunks: cites, terms: q, text: extract(byId[best.chunk], q),
+          stale: doc.review_by < cfg.now, superseded_seen: older, owner: doc.owner,
+          retrieved: hits.slice(0, st.top_k).map(function (h) { return h.chunk; }) };
+      }
+      var hidden = ix.search(question, function (d) { return !canSee(d); }, st)[1].filter(function (h) {
+        return strong(h, st) && !ix.docs[h.doc].superseded_by;
+      });
+      var route = best ? best.doc : null;
+      if (hidden.length && st.hint_restricted && ix.docs[hidden[0].doc].discoverable) {
+        var d = ix.docs[hidden[0].doc];
+        return { decision: "restricted", doc: d.id, owner: d.owner, terms: q, chunks: [], retrieved: [] };
+      }
+      return { decision: "unknown", doc: null, owner: route ? ix.docs[route].owner : "ruth", near: route, terms: q,
+        chunks: [], retrieved: hits.slice(0, st.top_k).map(function (h) { return h.chunk; }) };
+    }
+    function ask(ix, question, asker, channel, settings, users, channels) {
+      var mine = users[asker].groups;
+      var personal = decide(ix, question, function (d) { return canRead(ix, mine, d); }, settings);
+      if (personal.decision === "unknown" && personal.owner === asker) personal.owner = asker === "ruth" ? "leo" : "ruth";
+      if (!channel) return Object.assign(personal, { visibility: "dm" });
+      var members = channels[channel].members;
+      var pub = decide(ix, question, function (d) { return visibleToAll(ix, members, d, users); }, settings);
+      if (pub.decision === "answer") return Object.assign(pub, { visibility: "channel" });
+      if (personal.decision === "answer") return Object.assign(personal, { visibility: "ephemeral" });
+      if (personal.decision === "restricted") return Object.assign(personal, { visibility: "ephemeral" });
+      return Object.assign(personal, { visibility: "channel" });
+    }
+    return { tokenize: tokenize, Index: Index, decide: decide, ask: ask, canRead: canRead };
+  }
+
+  if (typeof module !== "undefined" && module.exports) module.exports = { make: make };
+  else root.LanternEngine = { make: make };
+})(this);
+</script>
+<script>(function () {
+  "use strict";
+  var D = window.LANTERN;
+  var E = window.LanternEngine.make(D.engine);
+  var ix = new E.Index(JSON.parse(JSON.stringify(D.docs)));
+  var U = D.users, CH = D.channels, G = D.groups;
+  var COLORS = { maya: "#2f6f8a", jonas: "#7a4fa0", ruth: "#b0532e", dev: "#3f7d4f", ana: "#9a6b12", leo: "#33465f" };
+  var SRC_COLORS = { confluence: "#2f5f8a", drive: "#2e7a4d", notion: "#55514a", lantern: "#e9952b" };
+
+  var S = {
+    as: "maya",
+    settings: Object.assign({}, D.engine.defaults, { log_question_text: true }),
+    msgs: D.messages.map(function (m, i) { return Object.assign({}, m, { t: time(i) }); }),
+    gaps: JSON.parse(JSON.stringify(D.gaps)),
+    reviews: JSON.parse(JSON.stringify(D.reviews)),
+    audit: JSON.parse(JSON.stringify(D.audit)),
+    main: "dm", pane: null, pending: null, palette: false, edit: null, flash: {},
+    seq: D.audit.length, msgN: D.messages.length,
+  };
+
+  function time(i) { var m = 9 * 60 + 4 + i * 7; return String(Math.floor(m / 60)).padStart(2, "0") + ":" + String(m % 60).padStart(2, "0"); }
+  function esc(s) { return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) { return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]; }); }
+  function $(sel) { return document.querySelector(sel); }
+  function first(n) { return U[n].name.split(" ")[0]; }
+  function initials(n) { return U[n].name.split(" ").map(function (p) { return p[0]; }).join(""); }
+  function av(n, cls) { return '<span class="av ' + (cls || "") + '" style="background:' + COLORS[n] + '" title="' + esc(U[n].name) + '">' + initials(n) + "</span>"; }
+  function isAdmin(n) { return D.admins.indexOf(n) >= 0; }
+  function canRead(n, docId) { return E.canRead(ix, U[n].groups, docId); }
+  function srcName(k) { return (D.sources[k] || { name: "Lantern" }).name; }
+  function now() { return D.now; }
+  function log(actor, action, detail) { S.audit.push(Object.assign({ seq: ++S.seq, actor: actor, action: action }, detail)); }
+  function toast(t) { var el = $("#toast"); el.textContent = t; el.classList.add("show"); clearTimeout(toast.t); toast.t = setTimeout(function () { el.classList.remove("show"); }, 2200); }
+
+  // ---------- routing ----------
+  function parse() {
+    var h = location.hash.replace(/^#/, ""), q = "";
+    if (h.indexOf("?") >= 0) { q = h.split("?")[1]; h = h.split("?")[0]; }
+    var as = (q.match(/as=([a-z]+)/) || [])[1];
+    if (as && U[as]) S.as = as;
+    if (!h) h = "dm";
+    var p = h.split("/");
+    if (p[0] === "doc") { S.pane = { doc: p[1], hit: p[2] ? p[1] + "#" + p[2] : null }; }
+    else { S.main = h; if (p[0] !== "gap") S.edit = null; }
+  }
+  function go(h) { location.hash = h; }
+
+  // ---------- asking ----------
+  function where() { var p = S.main.split("/"); return p[0] === "c" ? p[1] : null; }
+  function ask(q) {
+    q = q.trim();
+    if (!q || S.pending) return;
+    var ch = where();
+    S.pending = { ch: ch, q: q, who: S.as };
+    render();
+    setTimeout(function () {
+      var seed = D.messages.filter(function (m) { return m.asker === S.as && m.channel === ch && m.question.toLowerCase() === q.toLowerCase(); })[0];
+      var r = seed ? JSON.parse(JSON.stringify(seed)) : E.ask(ix, q, S.as, ch, S.settings, U, CH);
+      var m = Object.assign({}, r, { id: "M-" + String(++S.msgN).padStart(3, "0"), asker: S.as, channel: ch, question: q, feedback: [], t: time(S.msgN), draft: seed ? seed.draft : null, fresh: true });
+      S.msgs.push(m);
+      if (m.decision === "unknown") {
+        S.gaps.push({ id: "G-" + String(S.gaps.length + 1).padStart(2, "0"), question: q, asker: S.as, channel: ch, owner: m.owner, state: "open", kind: "no answer", history: [["open", S.as]] });
+        m.gap = S.gaps[S.gaps.length - 1].id;
+      }
+      var docs = Array.from(new Set((m.chunks || []).map(function (c) { return c.split("#")[0]; })));
+      log(S.as, "question", { message: m.id, decision: m.decision, visibility: m.visibility, docs: docs,
+        withheld_docs: Object.keys(ix.docs).filter(function (d) { return !canRead(S.as, d); }).length,
+        question: S.settings.log_question_text ? q : "(not stored)", draft: m.draft ? m.draft.status : null });
+      S.pending = null;
+      render();
+    }, 650);
+  }
+
+  function feedback(id, kind) {
+    var m = S.msgs.filter(function (x) { return x.id === id; })[0];
+    if (!m || m.feedback.some(function (f) { return f[0] === S.as && f[1] === kind; })) return;
+    m.feedback.push([S.as, kind]);
+    if (kind === "not_helpful") S.gaps.push({ id: "G-" + String(S.gaps.length + 1).padStart(2, "0"), question: m.question, asker: S.as, channel: m.channel, owner: m.owner || "ruth", state: "open", kind: "answer not helpful", history: [["open", S.as]] });
+    if (kind === "outdated" && m.doc) S.reviews.push({ doc: m.doc, owner: ix.docs[m.doc].owner, reason: "flagged outdated by " + S.as, state: "open" });
+    log(S.as, "feedback", { message: id, kind: kind });
+    toast({ helpful: "Thanks, noted.", not_helpful: "Sent to " + first(m.owner || "ruth") + " to improve.", outdated: first(ix.docs[m.doc].owner) + " has a review task now." }[kind]);
+    render();
+  }
+
+  // ---------- gap workflow (mirrors lantern/workspace.py) ----------
+  var FLOW = { open: ["assign", "dismiss"], assigned: ["answer", "assign", "dismiss"], answered: ["publish", "assign"], published: [], dismissed: ["reopen"] };
+  function allowed(g, action, actor) {
+    if (FLOW[g.state].indexOf(action) < 0) return "Can't " + action + " a gap that is " + g.state + ".";
+    if (["assign", "dismiss", "reopen"].indexOf(action) >= 0 && !isAdmin(actor)) return "Only a knowledge admin (Ruth or Leo) can " + action + ".";
+    if (["answer", "publish"].indexOf(action) >= 0 && !(actor === g.owner || isAdmin(actor))) return "Only " + first(g.owner) + " (the owner) or a knowledge admin can " + action + ".";
+    return null;
+  }
+  function move(id, action, kw) {
+    var g = S.gaps.filter(function (x) { return x.id === id; })[0];
+    var no = allowed(g, action, S.as);
+    if (no) { toast(no); return; }
+    if (action === "assign") { g.owner = kw.to; g.state = "assigned"; }
+    if (action === "answer") {
+      if (!kw.text.trim()) { toast("Write the answer first."); return; }
+      g.answer = kw.text.trim(); g.groups = kw.groups.length ? kw.groups : ["all_staff"]; g.state = "answered";
+    }
+    if (action === "publish") {
+      var docId = "FAQ-" + id.slice(2);
+      ix.add({ id: docId, title: "FAQ: " + g.question, source: "lantern", path: "Lantern / Answered questions", owner: g.owner, groups: g.groups,
+        discoverable: true, updated: now(), review_by: "2027-05-24", sections: [["Answer", g.answer]] });
+      g.doc = docId; g.state = "published";
+    }
+    if (action === "dismiss") { g.reason = kw.reason || ""; g.state = "dismissed"; }
+    if (action === "reopen") { g.state = "open"; }
+    g.history.push([g.state, S.as]);
+    log(S.as, "gap " + action, { gap: id, state: g.state });
+    toast({ assign: "Assigned to " + (kw && kw.to ? first(kw.to) : ""), answer: "Answer saved. Publish it to make it searchable.", publish: "Published. The next person who asks gets this answer.", dismiss: "Dismissed.", reopen: "Reopened." }[action]);
+    render();
+  }
+
+  // ---------- views ----------
+  function sidebar() {
+    var me = S.as, h = "";
+    h += '<div class="ws"><div class="logo"></div><div><b>' + esc(D.company) + '</b><small>Lantern for Slack</small></div></div>';
+    h += '<div class="as"><label for="as">Viewing as</label><select id="as">' + Object.keys(U).map(function (k) {
+      return '<option value="' + k + '"' + (k === me ? " selected" : "") + ">" + esc(U[k].name) + " · " + esc(U[k].title) + "</option>";
+    }).join("") + '</select><div class="who">' + av(me) + "<span>" + U[me].groups.map(function (g) { return esc(G[g]); }).join(", ") + (isAdmin(me) ? " · knowledge admin" : "") + "</span></div></div>";
+    h += '<nav class="nav"><h4>Channels</h4>';
+    Object.keys(CH).forEach(function (c) {
+      var mem = CH[c].members.indexOf(me) >= 0;
+      h += '<a href="#c/' + c + '" class="' + (S.main === "c/" + c ? "on " : "") + (mem ? "" : "off") + '"><span class="hash">#</span>' + c + "</a>";
+    });
+    h += '<h4>Direct messages</h4><a href="#dm" class="' + (S.main === "dm" ? "on" : "") + '"><span class="hash">◉</span>Lantern</a>';
+    var mine = S.gaps.filter(function (g) { return (g.state === "open" || g.state === "assigned" || g.state === "answered") && (g.owner === me || isAdmin(me)); }).length;
+    var desk = [["gaps", "Knowledge gaps", mine], ["sources", "Sources and sync"], ["access", "Who can read what"], ["evals", "Evals"], ["settings", "Answer settings"], ["audit", "Audit log"]];
+    h += "<h4>Knowledge desk</h4>" + desk.map(function (d) {
+      var on = S.main === d[0] || (d[0] === "gaps" && S.main.indexOf("gap/") === 0);
+      return '<a href="#' + d[0] + '" class="' + (on ? "on" : "") + '"><span class="hash">›</span>' + d[1] + (d[2] ? '<span class="badge">' + d[2] + "</span>" : "") + "</a>";
+    }).join("");
+    h += '</nav><div class="keys"><kbd>⌘K</kbd> jump · <kbd>/</kbd> ask · <kbd>Esc</kbd> close</div>';
+    return '<aside class="side">' + h + "</aside>";
+  }
+
+  function srcChip(c, m) {
+    var docId = c.split("#")[0], d = ix.docs[docId];
+    return '<a class="src" href="#doc/' + docId + "/" + c.split("#")[1] + '"><span class="dot" style="background:' + SRC_COLORS[d.source] + '"></span>' + esc(d.title) + ' <span style="color:var(--muted)">· ' + esc(srcName(d.source)) + "</span></a>";
+  }
+
+  function replyCard(m) {
+    var h = "";
+    if (m.decision === "answer") {
+      var priv = m.visibility === "ephemeral";
+      h += '<div class="reply' + (priv ? " private" : "") + '">';
+      if (priv) h += '<div class="private-note">◌ Only visible to you: this uses a document not everyone in #' + esc(m.channel) + " can read.</div>";
+      h += "<p>" + esc(m.text) + "</p>";
+      h += '<div class="srcs">' + m.chunks.map(function (c) { return srcChip(c, m); }).join("") + "</div>";
+      if (m.draft && m.draft.status === "accepted") h += '<div class="how">Written by Claude from the passages above; every citation and number checked by code.</div>';
+      else if (m.draft && m.draft.status === "rejected") h += '<div class="how warn">Claude\'s draft was rejected: it ' + esc(m.draft.reason.replace(/^cites/, "cited").replace(/^states/, "stated")) + ". Showing the passage as written instead.</div>";
+      else h += '<div class="how">Quoted from the source.</div>';
+      if (m.superseded_seen && m.superseded_seen.length) h += '<div class="note">An older version (' + m.superseded_seen.map(function (d) { return esc(ix.docs[d].title); }).join(", ") + ") is still in the drive. I used the current policy.</div>";
+      if (m.stale) h += '<div class="note">This page was due for review on ' + esc(ix.docs[m.doc].review_by) + ". " + esc(first(ix.docs[m.doc].owner)) + " has a review task.</div>";
+      var mine = m.feedback.filter(function (f) { return f[0] === S.as; }).map(function (f) { return f[1]; });
+      h += '<div class="fb">' + [["helpful", "Helpful"], ["not_helpful", "Not helpful"], ["outdated", "Flag as outdated"]].map(function (b) {
+        return '<button data-fb="' + m.id + "|" + b[0] + '" class="' + (mine.indexOf(b[0]) >= 0 ? "done" : "") + '">' + b[1] + "</button>";
+      }).join("") + "</div></div>";
+    } else if (m.decision === "restricted") {
+      var d = ix.docs[m.doc];
+      h += '<div class="reply locked"><div class="private-note" style="color:var(--lock)">◌ Only visible to you</div><p>There is a document on this, <b>' + esc(d.title) + "</b>, but it isn't shared with you, so I can't use it. " + esc(U[m.owner].name) + " owns it and can tell you what you're able to know.</p></div>";
+    } else {
+      var g = S.gaps.filter(function (x) { return x.question === m.question && x.asker === m.asker; })[0];
+      h += '<div class="reply unknown"><p>I couldn\'t find this written down anywhere I can read. I\'ve asked <b>' + esc(U[m.owner].name) + "</b>, and the answer will be added so the next person gets it straight away.</p>" + (g ? '<a class="src" href="#gap/' + g.id + '">Knowledge gap ' + g.id + " · " + esc(g.state) + "</a>" : "") + "</div>";
+    }
+    return h;
+  }
+
+  function messageHtml(m) {
+    return '<div class="msg">' + av(m.asker) + '<div><div class="meta"><b>' + esc(U[m.asker].name) + "</b>" + m.t + '</div><div class="body">' + esc(m.question) + "</div></div></div>" +
+      '<div class="msg bot"><span class="av"></span><div><div class="meta"><b>Lantern</b>' + m.t + " · app</div>" + replyCard(m) + "</div></div>";
+  }
+
+  function suggestions(ch) {
+    var asked = S.msgs.filter(function (m) { return m.asker === S.as; }).map(function (m) { return m.question; });
+    var list = D.cases.filter(function (c) { return c.who === S.as && c.where === ch && asked.indexOf(c.q) < 0; }).map(function (c) { return c.q; });
+    var extra = { maya: ["How much annual leave do I get?", "I clicked a phishing link, what do I do?"], jonas: ["What is the per diem in Paris?", "Can I bring my dog to the office?"],
+      ruth: ["What is the salary band for an engineer L3?", "Is there a company car scheme?"], dev: ["Can contractors get a home office budget?", "What is the deploy freeze over Christmas?"],
+      ana: ["When do payslips appear?", "Who approves a 15% discount on a deal?"], leo: ["What was Q3 revenue against plan and what is the runway?", "How long do we have to answer a GDPR request?"] }[S.as];
+    if (!ch) list = list.concat(extra);
+    return list.filter(function (q, i, a) { return a.indexOf(q) === i && asked.indexOf(q) < 0; }).slice(0, 4);
+  }
+
+  function composer(ch) {
+    var chips = suggestions(ch);
+    return '<div class="compose">' + (chips.length ? '<div class="chips">' + chips.map(function (q) { return '<button class="chip" data-ask="' + esc(q) + '">' + esc(q) + "</button>"; }).join("") + "</div>" : "") +
+      '<form class="box" id="ask"><input id="q" autocomplete="off" placeholder="' + (ch ? "Ask Lantern in #" + ch + "…" : "Ask Lantern anything about how " + esc(D.company) + " works…") + '" aria-label="Question"><button ' + (S.pending ? "disabled" : "") + ">Ask</button></form></div>";
+  }
+
+  function pendingHtml(ch) {
+    if (!S.pending || S.pending.ch !== ch) return "";
+    return '<div class="msg">' + av(S.as) + '<div><div class="meta"><b>' + esc(U[S.as].name) + '</b>now</div><div class="body">' + esc(S.pending.q) + "</div></div></div>" +
+      '<div class="msg bot"><span class="av"></span><div><div class="meta"><b>Lantern</b>looking through Confluence, Google Drive and Notion…</div><div class="typing"><i></i><i></i><i></i></div></div></div>';
+  }
+
+  function channelView(ch) {
+    var c = CH[ch];
+    var head = '<div class="head"><h1># ' + ch + '</h1><span class="topic">' + esc(c.topic) + '</span><span class="members">' + c.members.map(function (m) { return av(m); }).join("") + "</span></div>";
+    if (c.members.indexOf(S.as) < 0) return head + '<div class="stream"><div class="empty"><h3>' + esc(first(S.as)) + " isn't in #" + ch + "</h3><p>Lantern answers in a channel using only what every member may read. Switch person on the left, or ask in a DM.</p></div></div>";
+    var list = S.msgs.filter(function (m) { return m.channel === ch && (m.visibility !== "ephemeral" || m.asker === S.as); });
+    return head + '<div class="stream" id="stream"><div class="day">Today</div>' + list.map(messageHtml).join("") + pendingHtml(ch) + "</div>" + composer(ch);
+  }
+
+  function dmView() {
+    var list = S.msgs.filter(function (m) { return m.channel === null && m.asker === S.as; });
+    var me = U[S.as];
+    var readable = Object.keys(ix.docs).filter(function (d) { return canRead(S.as, d) && !ix.docs[d].superseded_by; }).length;
+    var w = '<div class="welcome"><h2>Hi ' + esc(first(S.as)) + ", I'm Lantern.</h2><div>I answer questions from " + esc(D.company) + "'s Confluence, Google Drive and Notion, and I show you where every answer comes from. Right now you can read " + readable + " current documents.</div><ol>" +
+      "<li>Ask in your own words; I'll cite the page.</li><li>If something isn't shared with you, I'll say who owns it, not what's in it.</li><li>If nobody wrote it down yet, I ask the right person and remember the answer.</li></ol></div>";
+    return '<div class="head"><h1>Lantern</h1><span class="topic">Direct message · answers only you can see</span></div><div class="stream" id="stream">' + w + list.map(messageHtml).join("") + pendingHtml(null) + "</div>" + composer(null);
+  }
+
+  function docPane() {
+    var id = S.pane.doc, d = ix.docs[id];
+    var close = '<div class="ph"><span>Source document</span><button data-close aria-label="Close">×</button></div>';
+    if (!d || (!canRead(S.as, id) && !d.discoverable)) return '<aside class="pane">' + close + '<div class="doc"><div class="empty"><h3>Not found</h3><p>This document doesn\'t exist or isn\'t shared with you.</p></div></div></aside>';
+    if (!canRead(S.as, id)) return '<aside class="pane">' + close + '<div class="doc"><span class="pill lock">Not shared with you</span><h2>' + esc(d.title) + '</h2><div class="path">' + esc(srcName(d.source)) + " · " + esc(d.path) + "</div><p>Lantern won't show or use this page for you. Ask " + esc(U[d.owner].name) + " if you need it.</p></div></aside>";
+    var readers = Object.keys(U).filter(function (u) { return canRead(u, id); });
+    var h = close + '<div class="doc">';
+    if (d.superseded_by) h += '<span class="pill warn">Archived · replaced by <a href="#doc/' + d.superseded_by + '">' + esc(ix.docs[d.superseded_by].title) + "</a></span>";
+    if (d.review_by < now() && !d.superseded_by) h += '<span class="pill warn">Past review date</span>';
+    if (!d.discoverable) h += '<span class="pill lock">Hidden from search for others</span>';
+    h += "<h2>" + esc(d.title) + '</h2><div class="path"><span class="dot" style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + SRC_COLORS[d.source] + '"></span> ' + esc(srcName(d.source)) + " · " + esc(d.path) + "</div>";
+    h += '<dl class="facts"><dt>Owner</dt><dd>' + esc(U[d.owner].name) + "</dd><dt>Updated</dt><dd>" + esc(d.updated) + "</dd><dt>Review by</dt><dd>" + esc(d.review_by) + "</dd><dt>Shared with</dt><dd>" +
+      d.groups.map(function (g) { return '<span class="pill g">' + esc(G[g]) + "</span>"; }).join("") + "</dd><dt>Can read</dt><dd>" + readers.map(function (u) { return av(u); }).join(" ") + "</dd></dl>";
+    d.sections.forEach(function (s, i) {
+      var cid = id + "#" + (i + 1);
+      h += "<h3>" + esc(s[0]) + '</h3><div class="sec' + (S.pane.hit === cid ? " hit" : "") + '" id="sec-' + (i + 1) + '">' + esc(s[1]) + "</div>";
+    });
+    return '<aside class="pane">' + h + "</div></aside>";
+  }
+
+  function gapsView() {
+    var sel = S.main.indexOf("gap/") === 0 ? S.main.split("/")[1] : null;
+    var lanes = [["open", "Open"], ["assigned", "Assigned"], ["answered", "Answered, not live"], ["done", "Published or dismissed"]];
+    var h = '<div class="page"><h2>Knowledge gaps</h2><p class="lede">Questions nobody had written down, and answers people marked not helpful. Each goes to an owner; once answered and published it becomes a source Lantern cites, with the sharing the owner chose.</p>';
+    h += '<div class="split" style="' + (sel ? "" : "grid-template-columns:1fr") + '"><div class="lanes' + (sel ? " two" : "") + '">';
+    lanes.forEach(function (l) {
+      var items = S.gaps.filter(function (g) { return l[0] === "done" ? (g.state === "published" || g.state === "dismissed") : g.state === l[0]; });
+      h += '<div class="lane"><h4>' + l[1] + "<span>" + items.length + "</span></h4>" + items.map(function (g) {
+        return '<a class="card' + (g.id === sel ? " on" : "") + '" href="#gap/' + g.id + '"><q>' + esc(g.question) + "</q><small>" + g.id + " · " + esc(g.kind) + "</small><small>Asked by " + esc(first(g.asker)) + (g.channel ? " in #" + esc(g.channel) : " in a DM") + "</small><small>Owner: " + esc(U[g.owner].name) + "</small></a>";
+      }).join("") + (items.length ? "" : '<small style="color:var(--muted);padding:4px">Nothing here.</small>') + "</div>";
+    });
+    h += "</div>";
+    if (sel) h += gapPanel(S.gaps.filter(function (g) { return g.id === sel; })[0]);
+    h += "</div>";
+    h += '<h3 style="margin:26px 0 8px;font-size:15px">Page review tasks</h3><table><tr><th>Document</th><th>Owner</th><th>Why</th></tr>' + S.reviews.map(function (r) {
+      return '<tr><td><a href="#doc/' + r.doc + '">' + esc(ix.docs[r.doc].title) + "</a></td><td>" + esc(U[r.owner].name) + "</td><td>" + esc(r.reason) + "</td></tr>";
+    }).join("") + "</table></div>";
+    return '<div class="head"><h1>Knowledge desk</h1><span class="topic">Viewing as ' + esc(U[S.as].name) + (isAdmin(S.as) ? " (knowledge admin)" : "") + "</span></div>" + h;
+  }
+
+  function gapPanel(g) {
+    if (!g) return '<div class="panel">Gap not found.</div>';
+    var h = '<div class="panel"><span class="pill ' + (g.state === "published" ? "ok" : g.state === "dismissed" ? "grey" : "warn") + '">' + esc(g.state) + "</span><h3>" + esc(g.question) + "</h3>";
+    h += '<div style="color:var(--muted);font-size:12.5px">' + g.id + " · " + esc(g.kind) + " · asked by " + esc(U[g.asker].name) + (g.channel ? " in #" + esc(g.channel) : " in a DM") + "</div>";
+    var no = function (a) { return allowed(g, a, S.as); };
+    if (g.state === "open" || g.state === "assigned" || g.state === "answered") {
+      h += '<div class="row"><label>Owner</label><select id="gap-to">' + Object.keys(U).filter(function (u) { return u !== "dev"; }).map(function (u) { return '<option value="' + u + '"' + (u === g.owner ? " selected" : "") + ">" + esc(U[u].name) + "</option>"; }).join("") + '</select><button class="btn" data-gap="assign" ' + (no("assign") ? "disabled" : "") + ">Assign</button></div>";
+      if (no("assign")) h += '<div class="denied">' + esc(no("assign")) + "</div>";
+    }
+    if (g.state === "assigned") {
+      h += '<div style="margin-top:12px"><label for="gap-text"><b>Answer</b></label><textarea id="gap-text" placeholder="Write the answer the way you would tell a colleague.">' + esc(g.answer || "") + "</textarea></div>";
+      h += '<div class="row"><span style="font-size:12.5px">Who may read it:</span>' + Object.keys(G).map(function (k) { return '<label style="font-size:12.5px"><input type="checkbox" name="grp" value="' + k + '"' + (k === "all_staff" ? " checked" : "") + "> " + esc(G[k]) + "</label>"; }).join("") + "</div>";
+      h += '<div class="row"><button class="btn pri" data-gap="answer" ' + (no("answer") ? "disabled" : "") + '>Save answer</button><input type="text" id="gap-reason" placeholder="Reason to dismiss"><button class="btn" data-gap="dismiss" ' + (no("dismiss") ? "disabled" : "") + ">Dismiss</button></div>";
+      if (no("answer")) h += '<div class="denied">' + esc(no("answer")) + "</div>";
+    }
+    if (g.state === "open") h += '<div class="row"><input type="text" id="gap-reason" placeholder="Reason to dismiss"><button class="btn" data-gap="dismiss" ' + (no("dismiss") ? "disabled" : "") + ">Dismiss</button></div>";
+    if (g.state === "answered") {
+      h += '<div class="warnbox" style="background:var(--paper);color:var(--ink)"><b>Draft answer</b><br>' + esc(g.answer) + '<br><span style="color:var(--muted)">Readable by: ' + g.groups.map(function (x) { return esc(G[x]); }).join(", ") + "</span></div>";
+      h += '<div class="row"><button class="btn amber" data-gap="publish" ' + (no("publish") ? "disabled" : "") + ">Publish to Lantern</button></div>";
+      if (no("publish")) h += '<div class="denied">' + esc(no("publish")) + "</div>";
+    }
+    if (g.state === "published") h += '<p>Live as <a href="#doc/' + g.doc + '">' + esc(ix.docs[g.doc].title) + "</a>. Ask the same question again and Lantern answers from it.</p>";
+    if (g.state === "dismissed") h += "<p>Dismissed" + (g.reason ? ": " + esc(g.reason) : "") + '.</p><div class="row"><button class="btn" data-gap="reopen" ' + (no("reopen") ? "disabled" : "") + ">Reopen</button></div>";
+    h += '<ul class="hist">' + g.history.map(function (x) { return "<li>" + esc(x[0]) + " by " + esc(U[x[1]] ? U[x[1]].name : x[1]) + "</li>"; }).join("") + "</ul></div>";
+    return h;
+  }
+
+  function sourcesView() {
+    var h = '<div class="page"><h2>Sources and sync</h2><p class="lede">Each source shares documents its own way. The sync maps those people and groups to the company directory. Anything it can\'t map is dropped, so a page is never more visible in Lantern than at the source.</p><div class="sources">';
+    D.sync.forEach(function (s) {
+      h += '<div class="panel"><h3><span class="dot" style="display:inline-block;width:9px;height:9px;border-radius:50%;background:' + SRC_COLORS[s.source] + '"></span> ' + esc(s.name) + '</h3><div style="color:var(--muted);font-size:12.5px">' + esc(s.scope) + " · last sync " + esc(s.last_sync) + ' <span class="pill ok">connected (mock)</span></div>';
+      h += '<table style="margin-top:10px"><tr><th>Page</th><th>Shared at source</th><th>Lantern groups</th></tr>' + s.docs.map(function (d) {
+        return '<tr><td><a href="#doc/' + d.doc + '">' + esc(d.title) + '</a></td><td class="mono">' + d.native.map(esc).join("<br>") + "</td><td>" + d.groups.map(function (g) { return '<span class="pill g">' + esc(G[g]) + "</span>"; }).join("") + "</td></tr>";
+      }).join("") + "</table>";
+      s.warnings.forEach(function (w) { h += '<div class="warnbox">' + esc(w.doc) + ": " + w.principals.map(esc).join(", ") + " isn't in the directory, so it was " + esc(w.effect) + ".</div>"; });
+      h += "</div>";
+    });
+    return '<div class="head"><h1>Knowledge desk</h1><span class="topic">Connectors are mocked in this demo; the mapping and fail-closed rule are real code.</span></div>' + h + "</div></div>";
+  }
+
+  function accessView() {
+    var people = Object.keys(U), admin = isAdmin(S.as);
+    var h = '<div class="page"><h2>Who can read what</h2><p class="lede">Lantern searches only the pages the asker may read. In a channel it uses only pages every member may read and answers privately when it needs more. Hidden pages are never even named.</p>';
+    if (!admin) h += '<div class="lockmsg">You can see this table, but only a knowledge admin can simulate sharing changes. Switch to Ruth or Leo.</div>';
+    h += "<table><tr><th>Page</th><th>Source</th>" + people.map(function (p) { return '<th class="c">' + av(p) + "</th>"; }).join("") + "<th>Named to others</th><th></th></tr>";
+    ix.order.forEach(function (id) {
+      var d = ix.docs[id];
+      h += '<tr><td><a href="#doc/' + id + '">' + esc(d.title) + "</a>" + (d.superseded_by ? ' <span class="pill grey">archived</span>' : "") + "</td><td>" + esc(srcName(d.source)) + "</td>" + people.map(function (p) {
+        return '<td class="c">' + (canRead(p, id) ? '<span class="yes">✓</span>' : '<span class="no">·</span>') + "</td>";
+      }).join("") + "<td>" + (d.discoverable ? "yes" : '<span class="pill lock">no</span>') + "</td><td>" + (admin ? '<button class="btn" data-share="' + id + '">Change sharing</button>' : "") + "</td></tr>";
+      if (S.edit === id) {
+        h += '<tr><td colspan="' + (people.length + 4) + '" style="background:var(--paper)"><b>Simulate a sharing change at ' + esc(srcName(d.source)) + ":</b> " + Object.keys(G).map(function (g) {
+          return '<label style="margin-right:10px"><input type="checkbox" name="share" value="' + g + '"' + (d.groups.indexOf(g) >= 0 ? " checked" : "") + "> " + esc(G[g]) + "</label>";
+        }).join("") + ' <button class="btn pri" data-share-save="' + id + '">Apply sync</button> <span style="color:var(--muted);font-size:12.5px">Takes effect on the next question.</span></td></tr>';
+      }
+    });
+    return '<div class="head"><h1>Knowledge desk</h1><span class="topic">Permissions come from the sources, refreshed on every sync</span></div>' + h + "</table></div>";
+  }
+
+  function evalsView() {
+    var e = D.evals;
+    var h = '<div class="page"><h2>Evals</h2><p class="lede">Run in CI on every change: a fixed question set across six people and three channels, a leak sweep that asks every person the exact wording of every page they may not read, and model drafts planted with mistakes that code must catch.</p>';
+    h += '<div class="tiles"><div class="tile good"><b>' + e.passed + "/" + e.total + '</b><span>questions handled as expected</span></div><div class="tile good"><b>' + e.answered_right + "/" + e.answer_cases + '</b><span>answered from the right page</span></div><div class="tile good"><b>' + e.abstained_right + "/" + e.abstain_cases +
+      '</b><span>declined or routed correctly</span></div><div class="tile good"><b>' + e.leaks.length + '</b><span>leaks in ' + e.probes + ' extraction probes</span></div><div class="tile warn"><b>' + e.drafts_rejected.length + "</b><span>bad model drafts caught (" + e.drafts_accepted + " accepted)</span></div></div>";
+    h += '<h3 style="font-size:15px;margin:0 0 8px">Drafts code rejected</h3><table><tr><th>Case</th><th>Why</th></tr>' + e.drafts_rejected.map(function (r) { return "<tr><td>" + r.id + "</td><td>" + esc(r.reason) + "</td></tr>"; }).join("") + "</table>";
+    h += '<h3 style="font-size:15px;margin:18px 0 8px">Question set</h3><table><tr><th>Case</th><th>Who</th><th>Where</th><th>Question</th><th>Expected</th><th>Got</th><th>Shown</th><th class="c">Pass</th></tr>' + e.cases.map(function (c) {
+      return "<tr><td>" + c.id + "</td><td>" + esc(first(c.who)) + "</td><td>" + (c.where ? "#" + esc(c.where) : "DM") + "</td><td>" + esc(c.q) + "</td><td>" + esc(c.expect) + (c.want_doc ? " · " + c.want_doc : "") + "</td><td>" + esc(c.got) + (c.doc ? " · " + c.doc : "") + "</td><td>" + esc(c.visibility) + '</td><td class="c">' + (c.pass ? '<span class="yes">✓</span>' : "✗") + "</td></tr>";
+    }).join("") + "</table></div>";
+    return '<div class="head"><h1>Knowledge desk</h1><span class="topic">Results from python -m lantern eval</span></div>' + h;
+  }
+
+  function settingsView() {
+    var a = isAdmin(S.as), st = S.settings, dis = a ? "" : " disabled";
+    var h = '<div class="page"><h2>Answer settings</h2><p class="lede">How sure Lantern must be before it answers, and what it may say about pages someone can\'t read. Changes apply to the next question and are written to the audit log.</p>';
+    if (!a) h += '<div class="lockmsg">Only knowledge admins (Ruth Lindqvist, Leo Brandt) can change these. You\'re viewing as ' + esc(U[S.as].name) + ".</div>";
+    h += '<div class="set"><div><b>Evidence needed to answer</b><p>Minimum relevance of the best page. Lower answers more, but guesses more.</p></div><div><input type="range" min="1" max="12" step="0.5" value="' + st.answer_threshold + '" data-set="answer_threshold"' + dis + "> <b>" + st.answer_threshold + "</b></div></div>";
+    h += '<div class="set"><div><b>Words that must match</b><p>Distinct words from the question the page must contain.</p></div><div><select data-set="min_terms"' + dis + ">" + [1, 2, 3].map(function (n) { return "<option" + (n === st.min_terms ? " selected" : "") + ">" + n + "</option>"; }).join("") + "</select></div></div>";
+    h += '<div class="set"><div><b>Say when a page exists but isn\'t yours</b><p>Names the page and its owner, never its content. Pages marked hidden are never named either way.</p></div><div><label><input type="checkbox" data-set="hint_restricted"' + (st.hint_restricted ? " checked" : "") + dis + "> On</label></div></div>";
+    h += '<div class="set"><div><b>Keep question text in the audit log</b><p>Off stores who asked and which pages were used, but not the wording.</p></div><div><label><input type="checkbox" data-set="log_question_text"' + (st.log_question_text ? " checked" : "") + dis + "> On</label></div></div>";
+    h += '<div class="set"><div><b>Archived versions</b><p>Older versions rank lower and can never be the only source of an answer.</p></div><div><span class="pill grey">weight ' + st.superseded_weight + "</span></div></div>";
+    return '<div class="head"><h1>Knowledge desk</h1><span class="topic">Settings</span></div>' + h + "</div>";
+  }
+
+  function auditView() {
+    if (!isAdmin(S.as)) return '<div class="head"><h1>Knowledge desk</h1></div><div class="page"><h2>Audit log</h2><div class="lockmsg">Only knowledge admins can read the audit log. Switch to Ruth or Leo on the left.</div></div>';
+    var rows = S.audit.slice().reverse();
+    var h = '<div class="page"><h2>Audit log</h2><p class="lede">Every question, which pages it used, how many pages were withheld from that person, every setting change, sharing change and gap decision.</p><table><tr><th>#</th><th>Who</th><th>What</th><th>Details</th></tr>';
+    h += rows.map(function (r) {
+      var det = Object.keys(r).filter(function (k) { return ["seq", "actor", "action"].indexOf(k) < 0 && r[k] !== null && r[k] !== undefined; }).map(function (k) {
+        var v = r[k]; return '<span style="color:var(--muted)">' + k + ":</span> " + esc(Array.isArray(v) ? v.join(", ") || "none" : v);
+      }).join(" · ");
+      return "<tr><td>" + r.seq + "</td><td>" + esc(U[r.actor] ? U[r.actor].name : r.actor) + "</td><td>" + esc(r.action) + "</td><td>" + det + "</td></tr>";
+    }).join("");
+    return '<div class="head"><h1>Knowledge desk</h1><span class="topic">Admin only</span></div>' + h + "</table></div>";
+  }
+
+  function mainView() {
+    var p = S.main.split("/");
+    if (p[0] === "c" && CH[p[1]]) return channelView(p[1]);
+    if (p[0] === "gaps" || p[0] === "gap") return gapsView();
+    if (p[0] === "sources") return sourcesView();
+    if (p[0] === "access") return accessView();
+    if (p[0] === "evals") return evalsView();
+    if (p[0] === "settings") return settingsView();
+    if (p[0] === "audit") return auditView();
+    return dmView();
+  }
+
+  function render() {
+    var app = $("#app"), keepQ = $("#q") ? $("#q").value : "", focused = document.activeElement && document.activeElement.id === "q";
+    app.className = S.pane ? "with-pane" : "";
+    app.innerHTML = sidebar() + "<main>" + mainView() + "</main>" + (S.pane ? docPane() : "");
+    var st = $("#stream");
+    if (st) st.scrollTop = st.scrollHeight;
+    if ($("#q")) { $("#q").value = S.pending ? "" : keepQ; if (focused) $("#q").focus(); }
+    if (S.pane && S.pane.hit) { var el = document.getElementById("sec-" + S.pane.hit.split("#")[1]); if (el) el.scrollIntoView({ block: "center" }); }
+    palette();
+  }
+
+  // ---------- palette ----------
+  function items() {
+    var out = Object.keys(CH).map(function (c) { return ["#" + c, "channel", "#c/" + c]; });
+    out.push(["Lantern", "direct message", "#dm"]);
+    [["Knowledge gaps", "gaps"], ["Sources and sync", "sources"], ["Who can read what", "access"], ["Evals", "evals"], ["Answer settings", "settings"], ["Audit log", "audit"]].forEach(function (x) { out.push([x[0], "desk", "#" + x[1]]); });
+    ix.order.forEach(function (id) { if (canRead(S.as, id)) out.push([ix.docs[id].title, srcName(ix.docs[id].source), "#doc/" + id]); });
+    return out;
+  }
+  var palSel = 0;
+  function palette() {
+    var el = $("#pal");
+    if (!el) { el = document.createElement("div"); el.id = "pal"; el.innerHTML = '<div class="in"><input id="palq" placeholder="Jump to a channel, page or desk view" aria-label="Jump to"><ul id="pall"></ul></div>'; document.body.appendChild(el);
+      el.addEventListener("click", function (e) { if (e.target === el) { S.palette = false; palette(); } var li = e.target.closest("li"); if (li) { S.palette = false; palette(); go(li.dataset.h.slice(1)); } });
+      $("#palq").addEventListener("input", function () { palSel = 0; fill(); });
+    }
+    el.classList.toggle("open", S.palette);
+    if (S.palette) fill();
+  }
+  function fill() {
+    var q = $("#palq").value.toLowerCase();
+    var list = items().filter(function (x) { return x[0].toLowerCase().indexOf(q) >= 0; }).slice(0, 12);
+    palSel = Math.max(0, Math.min(palSel, list.length - 1));
+    $("#pall").innerHTML = list.map(function (x, i) { return '<li data-h="' + x[2] + '" class="' + (i === palSel ? "on" : "") + '"><span>' + esc(x[0]) + "</span><small>" + esc(x[1]) + "</small></li>"; }).join("") || "<li><small>No match</small></li>";
+  }
+
+  // ---------- events ----------
+  document.addEventListener("submit", function (e) {
+    if (e.target.id === "ask") { e.preventDefault(); var v = $("#q").value; $("#q").value = ""; ask(v); }
+  });
+  document.addEventListener("change", function (e) {
+    var t = e.target;
+    if (t.id === "as") { S.as = t.value; S.pane = null; toast("Now viewing as " + U[S.as].name); var h = S.main; go(h + "?as=" + S.as); render(); return; }
+    if (t.dataset && t.dataset.set) {
+      if (!isAdmin(S.as)) return;
+      var k = t.dataset.set, old = S.settings[k];
+      var v = t.type === "checkbox" ? t.checked : t.type === "range" ? parseFloat(t.value) : parseInt(t.value, 10);
+      S.settings[k] = v;
+      log(S.as, "setting", { key: k, old: old, new: v });
+      toast("Saved. Applies to the next question.");
+      render();
+    }
+  });
+  document.addEventListener("click", function (e) {
+    var t = e.target.closest("[data-ask],[data-fb],[data-close],[data-gap],[data-share],[data-share-save]");
+    if (!t) return;
+    if (t.dataset.ask) { ask(t.dataset.ask); return; }
+    if (t.dataset.fb) { var p = t.dataset.fb.split("|"); feedback(p[0], p[1]); return; }
+    if (t.hasAttribute("data-close")) { S.pane = null; go(S.main); render(); return; }
+    if (t.dataset.gap) {
+      var id = S.main.split("/")[1], a = t.dataset.gap;
+      var kw = {};
+      if (a === "assign") kw.to = $("#gap-to").value;
+      if (a === "answer") { kw.text = $("#gap-text").value; kw.groups = Array.from(document.querySelectorAll('input[name="grp"]:checked')).map(function (x) { return x.value; }); }
+      if (a === "dismiss") kw.reason = ($("#gap-reason") || {}).value || "";
+      move(id, a, kw);
+      return;
+    }
+    if (t.dataset.share) { S.edit = S.edit === t.dataset.share ? null : t.dataset.share; render(); return; }
+    if (t.dataset.shareSave) {
+      var d = ix.docs[t.dataset.shareSave], old = d.groups.slice();
+      var g = Array.from(document.querySelectorAll('input[name="share"]:checked')).map(function (x) { return x.value; });
+      d.groups = g; ix.build(); S.edit = null;
+      log("sync:" + d.source, "permissions", { doc: d.id, old: old, new: g });
+      toast(g.length ? "Sharing updated for " + d.title : d.title + " is now shared with nobody");
+      render();
+    }
+  });
+  document.addEventListener("keydown", function (e) {
+    if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); S.palette = !S.palette; palette(); if (S.palette) { $("#palq").value = ""; fill(); $("#palq").focus(); } return; }
+    if (S.palette) {
+      var n = document.querySelectorAll("#pall li").length;
+      if (e.key === "Escape") { S.palette = false; palette(); }
+      if (e.key === "ArrowDown") { palSel = (palSel + 1) % n; fill(); e.preventDefault(); }
+      if (e.key === "ArrowUp") { palSel = (palSel - 1 + n) % n; fill(); e.preventDefault(); }
+      if (e.key === "Enter") { var li = document.querySelectorAll("#pall li")[palSel]; if (li && li.dataset.h) { S.palette = false; palette(); go(li.dataset.h.slice(1)); } }
+      return;
+    }
+    if (e.key === "Escape" && S.pane) { S.pane = null; go(S.main); render(); }
+    if (e.key === "/" && document.activeElement.tagName !== "INPUT" && document.activeElement.tagName !== "TEXTAREA" && $("#q")) { e.preventDefault(); $("#q").focus(); }
+  });
+  window.addEventListener("hashchange", function () {
+    var before = S.pane;
+    var h = location.hash;
+    if (h.indexOf("#doc/") !== 0) S.pane = null;
+    parse(); render();
+  });
+
+  parse();
+  if (location.hash.indexOf("#doc/") === 0 && !S.main) S.main = "dm";
+  render();
+})();
+</script>
+</body>
+</html>

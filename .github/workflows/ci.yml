@@ -1,0 +1,35 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            python: "3.9"
+          - os: ubuntu-latest
+            python: "3.12"
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: pip install -r requirements.txt
+      - name: Tests (core, Slack layer, browser parity)
+        run: python -m pytest -q
+      - name: Evals and leak sweep
+        run: python -m lantern eval
+      - name: Offline demo
+        run: python -m lantern demo
+      - name: Live demo page builds and is up to date
+        run: |
+          python -m lantern site --out /tmp/index.html
+          diff -q /tmp/index.html site/index.html
