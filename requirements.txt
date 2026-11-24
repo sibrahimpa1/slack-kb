@@ -1,0 +1,5 @@
+# Core and offline demo use the standard library only.
+pytest>=7
+# Live mode and Slack deployment:
+# anthropic>=1,<2
+# slack_bolt>=1.18
